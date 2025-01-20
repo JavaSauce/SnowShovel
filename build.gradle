@@ -17,6 +17,15 @@ dependencies {
     implementation 'org.apache.logging.log4j:log4j-slf4j-impl:3.0.0-beta2'
     implementation 'org.apache.logging.log4j:log4j-jul:3.0.0-beta2'
 
+    implementation 'net.sf.jopt-simple:jopt-simple:5.0.4'
+
+    implementation 'net.covers1624:Quack:0.4.10.113'
+    implementation 'net.covers1624:JdkUtils:0.6.0.24'
+    implementation 'net.covers1624:curl4j:3.0.16:libcurl'
+    implementation 'com.google.code.gson:gson:2.11.0'
+
+    implementation 'org.eclipse.jgit:org.eclipse.jgit:7.0.0.202409031743-r'
+
     compileOnly 'org.jetbrains:annotations:26.0.1'
     compileOnly 'com.google.code.findbugs:jsr305:3.0.2'
 
