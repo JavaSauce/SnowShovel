@@ -34,9 +34,6 @@ public class SnowShovel {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SnowShovel.class);
 
-    private static final MavenNotation DECOMPILER_TOOL_ARTIFACT = MavenNotation.parse("net.javasauce:Decompiler:0@zip");
-    private static final MavenNotation REMAPPER_TOOL_ARTIFACT = MavenNotation.parse("net.javasauce:Decompiler:0@zip");
-
     public static void main(String[] args) throws IOException {
         Path workDir = Path.of(".").toAbsolutePath().normalize();
         Path versionsDir = workDir.resolve("versions");
