@@ -87,6 +87,26 @@ public record VersionManifest(
         return file;
     }
 
+    public CompletableFuture<Path> requireDownloadAsync(HttpEngine http, Path versionsDir, String downloadName, String fileExtension) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return requireDownload(http, versionsDir, downloadName, fileExtension);
+            } catch (IOException ex) {
+                throw new RuntimeException("Failed to download file.", ex);
+            }
+        });
+    }
+
+    public Map<String, Path> requireDownloads(HttpEngine http, Path versionsDir, Map<String, String> downloads) {
+        Map<String, CompletableFuture<Path>> futureMap = FastStream.of(downloads.entrySet())
+                .toMap(Map.Entry::getKey, e -> requireDownloadAsync(http, versionsDir, e.getKey(), e.getValue()));
+
+        CompletableFuture.allOf(futureMap.values().toArray(CompletableFuture[]::new))
+                .join();
+        return FastStream.of(futureMap.entrySet())
+                .toMap(Map.Entry::getKey, e -> e.getValue().join());
+    }
+
     public boolean hasDownload(String name) {
         return downloads().containsKey(name);
     }
