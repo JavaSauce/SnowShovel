@@ -115,6 +115,7 @@ public class SnowShovel {
             }
 
             try (Git git = GitTasks.initRepo(versionDir, gitRepo, manifest)) {
+                GitTasks.removeAllFiles(versionDir);
                 // TODO after checkout we should nuke all files except the `.git` folder and let it all be re-generated.
                 Path clientJar = manifest.requireDownload(http, versionsDir, "client", "jar");
                 Path remappedJar = clientJar.resolveSibling(FilenameUtils.getBaseName(clientJar.toString()) + "-remapped.jar");

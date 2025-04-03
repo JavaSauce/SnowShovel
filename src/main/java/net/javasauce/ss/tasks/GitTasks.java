@@ -13,7 +13,11 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 
 /**
  * Created by covers1624 on 1/21/25.
@@ -85,5 +89,34 @@ public class GitTasks {
         } catch (GitAPIException ex) {
             throw new RuntimeException("Failed to push changes.", ex);
         }
+    }
+
+    public static void removeAllFiles(Path repoDir) throws IOException {
+        Files.walkFileTree(repoDir, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                // Don't descend into the .git directory.
+                if (dir.equals(repoDir.resolve(".git"))) {
+                    return FileVisitResult.SKIP_SUBTREE;
+                }
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                Files.deleteIfExists(file);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                // We have reached the starting directory, just terminate.
+                if (dir.equals(repoDir)) {
+                    return FileVisitResult.TERMINATE;
+                }
+                Files.deleteIfExists(dir);
+                return FileVisitResult.CONTINUE;
+            }
+        });
     }
 }
