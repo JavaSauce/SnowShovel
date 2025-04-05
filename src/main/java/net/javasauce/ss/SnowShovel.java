@@ -144,14 +144,13 @@ public class SnowShovel {
                         http,
                         jdkProvider,
                         toolsDir,
-                        "0.0.1",
+                        "0.0.10",
                         javaVersion,
                         FastStream.of(libraries)
                                 .map(LibraryTasks.LibraryDownload::path)
                                 .toList(),
                         remappedJar,
-                        versionDir.resolve("src/main/java"),
-                        versionDir.resolve("src/main/ast")
+                        versionDir
                 );
                 ProjectTasks.generateProjectFiles(versionDir, javaVersion, libraries);
                 GitTasks.stageAndCommit(git, "A commit!");

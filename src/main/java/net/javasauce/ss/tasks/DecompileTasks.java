@@ -23,26 +23,26 @@ public class DecompileTasks {
 
     private static final MavenNotation DECOMPILER_TOOL = MavenNotation.parse("net.javasauce:Decompiler:0@zip");
 
-    public static void decompileJar(HttpEngine http, JdkProvider jdkProvider, Path toolsDir, String decompilerVersion, JavaVersion javaVersion, List<Path> libraries, Path inputJar, Path sourceOutput, Path astOutput) {
+    public static void decompileJar(HttpEngine http, JdkProvider jdkProvider, Path toolsDir, String decompilerVersion, JavaVersion javaVersion, List<Path> libraries, Path inputJar, Path versionDir) {
         MavenNotation artifact = DECOMPILER_TOOL.withVersion(decompilerVersion);
         Path distZip = DownloadTasks.downloadFile(http, artifact.toURL("https://maven.covers1624.net").toString(), artifact.toPath(toolsDir));
         Path decompilerJar = ToolTasks.extractTool(toolsDir, artifact, distZip);
 
         Path javaHome = jdkProvider.findOrProvisionJdk(javaVersion);
 
-        // TODO We should write the log file somewhere
         var procResult = ProcessUtils.runProcess(
                 JavaInstall.getJavaExecutable(javaHome, true),
                 List.of(
                         "-ea", "-XX:-OmitStackTraceInFastThrow",
                         "-jar", decompilerJar.toAbsolutePath().toString(),
-                        "--output", sourceOutput.toAbsolutePath().toString(),
-                        "--output-ast", astOutput.toAbsolutePath().toString(),
+                        "--output", versionDir.resolve("src/main/java").toAbsolutePath().toString(),
+                        "--output-ast", versionDir.resolve("src/main/ast").toAbsolutePath().toString(),
                         "--input", inputJar.toAbsolutePath().toString(),
                         "--lib", FastStream.of(libraries)
                                 .map(Path::toAbsolutePath)
                                 .map(Path::toString)
-                                .join(File.pathSeparator)
+                                .join(File.pathSeparator),
+                        "--report", versionDir.resolve("decompile_report.txt").toAbsolutePath().toString()
                 ),
                 decompilerJar.getParent(),
                 LOGGER::info

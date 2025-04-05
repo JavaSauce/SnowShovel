@@ -114,6 +114,7 @@ public class ProjectTasks {
                 
                 # Other files.
                 !README.md
+                !decompile_report.txt
                 """
         );
     }
