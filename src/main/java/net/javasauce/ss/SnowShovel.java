@@ -25,6 +25,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 import static java.util.List.of;
 
@@ -117,20 +118,13 @@ public class SnowShovel {
 
             try (Git git = GitTasks.initRepo(versionDir, gitRepo, manifest)) {
                 GitTasks.removeAllFiles(versionDir);
-                // TODO after checkout we should nuke all files except the `.git` folder and let it all be re-generated.
-                Map<String, Path> downloads = manifest.requireDownloads(
-                        http,
-                        versionsDir,
-                        Map.of(
-                                "client", "jar",
-                                "client_mappings", "mojmap"
-                        )
-                );
-                Path clientJar = downloads.get("client");
-                Path clientMappings = downloads.get("client_mappings");
 
-                Path remappedJar = clientJar.resolveSibling(FilenameUtils.getBaseName(clientJar.toString()) + "-remapped.jar");
-                RemapperTasks.runRemapper(http, jdkProvider, toolsDir, clientJar, remappedJar, clientMappings);
+                CompletableFuture<Path> clientJar = manifest.requireDownloadAsync(http, versionsDir, "client", "jar");
+                CompletableFuture<Path> clientMappings = manifest.requireDownloadAsync(http, versionsDir, "client_mappings", "mojmap");
+                CompletableFuture.allOf(clientJar, clientMappings).join();
+
+                Path remappedJar = clientJar.join().resolveSibling(FilenameUtils.getBaseName(clientJar.toString()) + "-remapped.jar");
+                RemapperTasks.runRemapper(http, jdkProvider, toolsDir, clientJar.join(), remappedJar, clientMappings.join());
 
                 List<LibraryTasks.LibraryDownload> libraries = LibraryTasks.getVersionLibraries(manifest, librariesDir);
                 LibraryTasks.downloadLibraries(http, libraries);
