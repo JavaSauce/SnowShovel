@@ -1,5 +1,8 @@
 package net.javasauce.ss;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.reflect.TypeToken;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
@@ -7,6 +10,7 @@ import net.covers1624.curl4j.CABundle;
 import net.covers1624.curl4j.httpapi.Curl4jHttpEngine;
 import net.covers1624.jdkutils.JavaVersion;
 import net.covers1624.quack.collection.FastStream;
+import net.covers1624.quack.gson.JsonUtils;
 import net.covers1624.quack.io.CopyingFileVisitor;
 import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.tasks.*;
@@ -21,12 +25,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.Reader;
-import java.io.Writer;
+import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Properties;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import static java.util.List.of;
@@ -88,6 +93,11 @@ public class SnowShovel {
                 .run(gitRepo, versionIds);
     }
 
+    private static final Gson GSON = new GsonBuilder()
+            .setPrettyPrinting()
+            .create();
+    private static final Type MAP_STRING_TYPE = new TypeToken<Map<String, String>>() { }.getType();
+
     private final Path workDir;
     private final Path versionsDir;
     private final Path librariesDir;
@@ -127,12 +137,11 @@ public class SnowShovel {
             return;
         }
 
-        Properties props = new Properties();
         if (Files.exists(repoDir)) {
             Files.walkFileTree(repoDir, new DeleteHierarchyVisitor());
         }
         try (Git git = GitTasks.setup(repoDir, gitRepo)) {
-            pullCache(props);
+            Map<String, String> data = pullCache();
 
             for (VersionManifest manifest : manifests) {
                 LOGGER.info("Processing version {}", manifest.id());
@@ -171,7 +180,7 @@ public class SnowShovel {
             }
 
             GitTasks.checkoutOrCreateBranch(git, "main");
-            pushCache(props);
+            pushCache(data);
             emitMainGitignore();
             emitMainReadme();
 
@@ -181,24 +190,25 @@ public class SnowShovel {
         LOGGER.info("Done!");
     }
 
-    private void pullCache(Properties props) throws IOException {
+    private Map<String, String> pullCache() throws IOException {
         var repoCacheDir = repoDir.resolve("cache");
         if (Files.exists(repoCacheDir)) {
             Files.walkFileTree(repoCacheDir, new CopyingFileVisitor(repoCacheDir, cacheDir));
         }
-        var dataProperties = cacheDir.resolve("versions.properties");
-        if (Files.exists(dataProperties)) {
-            try (Reader reader = Files.newBufferedReader(dataProperties)) {
-                props.load(reader);
-            }
+        Map<String, String> data = null;
+        var dataJson = cacheDir.resolve("versions.json");
+        if (Files.exists(dataJson)) {
+            data = JsonUtils.parse(GSON, dataJson, MAP_STRING_TYPE, StandardCharsets.UTF_8);
         }
+        if (data == null) {
+            data = new HashMap<>();
+        }
+        return data;
     }
 
-    private void pushCache(Properties props) throws IOException {
-        var dataProperties = cacheDir.resolve("versions.properties");
-        try (Writer writer = Files.newBufferedWriter(dataProperties)) {
-            props.store(writer, "SnowShovel run saved properties.");
-        }
+    private void pushCache(Map<String, String> data) throws IOException {
+        var dataJson = cacheDir.resolve("versions.properties");
+        JsonUtils.write(GSON, dataJson, data, MAP_STRING_TYPE, StandardCharsets.UTF_8);
 
         var repoCacheDir = repoDir.resolve("cache");
         if (Files.exists(cacheDir)) {
