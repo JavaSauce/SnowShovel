@@ -25,15 +25,20 @@ public class GitTasks {
     public static Git setup(Path dir, String gitRepo) {
         LOGGER.info("Setting up checkout of {} in {}", gitRepo, dir);
         try {
-            var git = Git.cloneRepository()
-                    .setDirectory(dir.toFile())
-                    .setURI(gitRepo)
-                    .setNoCheckout(true)
-                    .setProgressMonitor(new TextProgressMonitor())
-                    .call();
+            Git git;
+            if (Files.exists(dir)) {
+                git = Git.open(dir.toFile());
+            } else {
+                git = Git.cloneRepository()
+                        .setDirectory(dir.toFile())
+                        .setURI(gitRepo)
+                        .setNoCheckout(true)
+                        .setProgressMonitor(new TextProgressMonitor())
+                        .call();
+            }
             checkoutOrCreateBranch(git, "main");
             return git;
-        } catch (GitAPIException ex) {
+        } catch (GitAPIException | IOException ex) {
             throw new RuntimeException("Failed to init git repo.", ex);
         }
     }

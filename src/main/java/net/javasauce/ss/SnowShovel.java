@@ -56,6 +56,9 @@ public class SnowShovel {
         OptionSpec<String> gitRepoOpt = parser.acceptsAll(of("r", "repo"), "The git repository to use.")
                 .withRequiredArg();
 
+        OptionSpec<Void> gitPushOpt = parser.accepts("gitPush", "If SnowShovel should push to the repository.");
+        OptionSpec<Void> gitCleanOpt = parser.accepts("gitClean", "If SnowShovel should delete the previous checkout (if available) before doing stuff.");
+
         OptionSet optSet = parser.parse(args);
         if (optSet.has(helpOpt)) {
             parser.printHelpOn(System.err);
@@ -89,8 +92,12 @@ public class SnowShovel {
         CredentialsProvider.setDefault(new UsernamePasswordCredentialsProvider(gitUser, gitPass));
 
         LOGGER.info("ShowShovel started for versions {}.", versionIds);
-        new SnowShovel(Path.of(".").toAbsolutePath().normalize())
-                .run(gitRepo, versionIds);
+        var ss = new SnowShovel(
+                Path.of(".").toAbsolutePath().normalize(),
+                optSet.has(gitPushOpt),
+                optSet.has(gitCleanOpt)
+        );
+        ss.run(gitRepo, versionIds);
     }
 
     private static final Gson GSON = new GsonBuilder()
@@ -99,6 +106,9 @@ public class SnowShovel {
     private static final Type MAP_STRING_TYPE = new TypeToken<Map<String, String>>() { }.getType();
 
     private final Path workDir;
+    private final boolean shouldPush;
+    private final boolean shouldClean;
+
     private final Path versionsDir;
     private final Path librariesDir;
     private final Path toolsDir;
@@ -106,8 +116,11 @@ public class SnowShovel {
     private final Path repoDir;
     private final Path cacheDir;
 
-    public SnowShovel(Path workDir) {
+    public SnowShovel(Path workDir, boolean shouldPush, boolean shouldClean) {
         this.workDir = workDir;
+        this.shouldPush = shouldPush;
+        this.shouldClean = shouldClean;
+
         versionsDir = workDir.resolve("versions");
         librariesDir = workDir.resolve("libraries");
         toolsDir = workDir.resolve("tools");
@@ -137,7 +150,7 @@ public class SnowShovel {
             return;
         }
 
-        if (Files.exists(repoDir)) {
+        if (shouldClean && Files.exists(repoDir)) {
             Files.walkFileTree(repoDir, new DeleteHierarchyVisitor());
         }
         try (Git git = GitTasks.setup(repoDir, gitRepo)) {
@@ -185,7 +198,9 @@ public class SnowShovel {
             emitMainReadme();
 
             GitTasks.stageAndCommit(git, "A commit!");
-            GitTasks.pushAllBranches(git);
+            if (shouldPush) {
+                GitTasks.pushAllBranches(git);
+            }
         }
         LOGGER.info("Done!");
     }
