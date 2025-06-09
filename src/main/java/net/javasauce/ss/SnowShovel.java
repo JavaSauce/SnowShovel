@@ -8,7 +8,6 @@ import net.covers1624.curl4j.httpapi.Curl4jHttpEngine;
 import net.covers1624.jdkutils.JavaVersion;
 import net.covers1624.quack.collection.FastStream;
 import net.covers1624.quack.io.CopyingFileVisitor;
-import net.covers1624.quack.maven.MavenNotation;
 import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.tasks.*;
 import net.javasauce.ss.util.DeleteHierarchyVisitor;
@@ -23,10 +22,10 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 
@@ -40,11 +39,6 @@ public class SnowShovel {
     private static final Logger LOGGER = LoggerFactory.getLogger(SnowShovel.class);
 
     public static void main(String[] args) throws IOException {
-        Path workDir = Path.of(".").toAbsolutePath().normalize();
-        Path versionsDir = workDir.resolve("versions");
-        Path librariesDir = workDir.resolve("libraries");
-        Path toolsDir = workDir.resolve("tools");
-
         OptionParser parser = new OptionParser();
         OptionSpec<String> nonOptions = parser.nonOptions();
 
@@ -90,7 +84,29 @@ public class SnowShovel {
         CredentialsProvider.setDefault(new UsernamePasswordCredentialsProvider(gitUser, gitPass));
 
         LOGGER.info("ShowShovel started for versions {}.", versionIds);
+        new SnowShovel(Path.of(".").toAbsolutePath().normalize())
+                .run(gitRepo, versionIds);
+    }
 
+    private final Path workDir;
+    private final Path versionsDir;
+    private final Path librariesDir;
+    private final Path toolsDir;
+
+    private final Path repoDir;
+    private final Path cacheDir;
+
+    public SnowShovel(Path workDir) {
+        this.workDir = workDir;
+        versionsDir = workDir.resolve("versions");
+        librariesDir = workDir.resolve("libraries");
+        toolsDir = workDir.resolve("tools");
+
+        repoDir = workDir.resolve("repo");
+        cacheDir = workDir.resolve("cache");
+    }
+
+    private void run(String gitRepo, List<String> versionIds) throws IOException {
         HttpEngine http = new Curl4jHttpEngine(CABundle.builtIn());
         JdkProvider jdkProvider = new JdkProvider(toolsDir.resolve("jdks/"), http);
 
@@ -111,25 +127,12 @@ public class SnowShovel {
             return;
         }
 
-        var repoDir = workDir.resolve("repo");
-        // Stored in the main branch in the same folder name.
-        var cacheDir = workDir.resolve("cache");
-        var repoCacheDir = repoDir.resolve("cache");
-
         Properties props = new Properties();
         if (Files.exists(repoDir)) {
             Files.walkFileTree(repoDir, new DeleteHierarchyVisitor());
         }
         try (Git git = GitTasks.setup(repoDir, gitRepo)) {
-            if (Files.exists(repoCacheDir)) {
-                Files.walkFileTree(repoCacheDir, new CopyingFileVisitor(repoCacheDir, cacheDir));
-            }
-            var dataProperties = cacheDir.resolve("versions.properties");
-            if (Files.exists(dataProperties)) {
-                try (Reader reader = Files.newBufferedReader(dataProperties)) {
-                    props.load(reader);
-                }
-            }
+            pullCache(props);
 
             for (VersionManifest manifest : manifests) {
                 LOGGER.info("Processing version {}", manifest.id());
@@ -168,28 +171,65 @@ public class SnowShovel {
             }
 
             GitTasks.checkoutOrCreateBranch(git, "main");
-            if (Files.exists(cacheDir)) {
-                Files.walkFileTree(cacheDir, new CopyingFileVisitor(cacheDir, repoCacheDir));
-            }
-            ProjectTasks.emitReadme(repoDir); // TODO emit better readme.
-            Files.writeString(repoDir.resolve(".gitignore"), """
-                    # exclude all
-                    /*
-                    
-                    # Include Important Folders
-                    !cache/
-                    
-                    # Include git important files
-                    !.gitignore
-                    
-                    # Other files.
-                    !README.md
-                    """
-            );
+            pushCache(props);
+            emitMainGitignore();
+            emitMainReadme();
+
             GitTasks.stageAndCommit(git, "A commit!");
             GitTasks.pushAllBranches(git);
         }
         LOGGER.info("Done!");
+    }
+
+    private void pullCache(Properties props) throws IOException {
+        var repoCacheDir = repoDir.resolve("cache");
+        if (Files.exists(repoCacheDir)) {
+            Files.walkFileTree(repoCacheDir, new CopyingFileVisitor(repoCacheDir, cacheDir));
+        }
+        var dataProperties = cacheDir.resolve("versions.properties");
+        if (Files.exists(dataProperties)) {
+            try (Reader reader = Files.newBufferedReader(dataProperties)) {
+                props.load(reader);
+            }
+        }
+    }
+
+    private void pushCache(Properties props) throws IOException {
+        var dataProperties = cacheDir.resolve("versions.properties");
+        try (Writer writer = Files.newBufferedWriter(dataProperties)) {
+            props.store(writer, "SnowShovel run saved properties.");
+        }
+
+        var repoCacheDir = repoDir.resolve("cache");
+        if (Files.exists(cacheDir)) {
+            Files.walkFileTree(cacheDir, new CopyingFileVisitor(cacheDir, repoCacheDir));
+        }
+    }
+
+    private void emitMainGitignore() throws IOException {
+        Files.writeString(repoDir.resolve(".gitignore"), """
+                # exclude all
+                /*
+                
+                # Include Important Folders
+                !cache/
+                
+                # Include git important files
+                !.gitignore
+                
+                # Other files.
+                !README.md
+                """
+        );
+    }
+
+    // TODO better readme for main branch.
+    private void emitMainReadme() throws IOException {
+        Files.writeString(repoDir.resolve("README.md"), """
+                # Shoveled
+                Output of SnowShovel
+                """
+        );
     }
 
     private static String branchNameForVersion(VersionManifest manifest) {
