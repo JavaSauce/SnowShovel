@@ -33,8 +33,6 @@ public class VersionManifestTasks {
         List<CompletableFuture<VersionManifest>> manifestFutures = FastStream.of(versions)
                 .map(version -> VersionManifest.updateFuture(http, versionsDir, version))
                 .toList();
-        CompletableFuture.allOf(manifestFutures.toArray(CompletableFuture[]::new))
-                .join();
         return FastStream.of(manifestFutures)
                 .map(CompletableFuture::join)
                 .toList();
