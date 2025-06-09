@@ -1,18 +1,14 @@
 package net.javasauce.ss.tasks;
 
-import net.javasauce.ss.util.VersionManifest;
+import org.eclipse.jgit.api.CreateBranchCommand;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
-import org.eclipse.jgit.lib.ConfigConstants;
 import org.eclipse.jgit.lib.Constants;
-import org.eclipse.jgit.lib.StoredConfig;
 import org.eclipse.jgit.lib.TextProgressMonitor;
-import org.eclipse.jgit.transport.URIish;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.URISyntaxException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,40 +22,48 @@ public class GitTasks {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GitTasks.class);
 
-    public static Git initRepo(Path versionDir, String gitRemote, VersionManifest manifest) {
-        String branch = manifest.type() + "/" + manifest.id();
-        LOGGER.info("Setting up git branch {} in {}", branch, versionDir);
+    public static Git setup(Path dir, String gitRepo) {
+        LOGGER.info("Setting up checkout of {} in {}", gitRepo, dir);
         try {
-            var git = Git.init()
-                    .setDirectory(versionDir.toFile())
-                    .setInitialBranch(branch)
-                    .call();
-            git.remoteAdd()
-                    .setName("origin")
-                    .setUri(new URIish(gitRemote))
-                    .call();
-            git.fetch()
+            var git = Git.cloneRepository()
+                    .setDirectory(dir.toFile())
+                    .setURI(gitRepo)
+                    .setNoCheckout(true)
                     .setProgressMonitor(new TextProgressMonitor())
                     .call();
+            checkoutOrCreateBranch(git, "main");
+            return git;
+        } catch (GitAPIException ex) {
+            throw new RuntimeException("Failed to init git repo.", ex);
+        }
+    }
 
-            if (git.getRepository().findRef(Constants.R_REMOTES + "origin/" + branch) != null) {
-                LOGGER.info("Pulling existing branch..");
-                git.pull()
-                        .setRemoteBranchName(branch)
+    public static void checkoutOrCreateBranch(Git git, String branch) {
+        try {
+            if (git.getRepository().getBranch().equals(branch)) return;
+
+            if (git.getRepository().findRef(Constants.R_HEADS + branch) != null) {
+                LOGGER.info("Checking out existing branch {}", branch);
+                git.checkout()
+                        .setName(branch)
+                        .call();
+            } else if (git.getRepository().findRef(Constants.R_REMOTES + "origin/" + branch) != null) {
+                LOGGER.info("Checking out existing remote branch {}", branch);
+                git.checkout()
+                        .setName(branch)
+                        .setCreateBranch(true)
+                        .setStartPoint("origin/" + branch)
+                        .setUpstreamMode(CreateBranchCommand.SetupUpstreamMode.TRACK)
                         .call();
             } else {
-                LOGGER.info("Setting remote tracking for new branch.");
-                // Thanks jgit for not just having this.
-                // In theory, we can do a branch create force, but this seems more sane.
-                StoredConfig config = git.getRepository().getConfig();
-                config.setString(ConfigConstants.CONFIG_BRANCH_SECTION, branch, ConfigConstants.CONFIG_KEY_REMOTE, "origin");
-                config.setString(ConfigConstants.CONFIG_BRANCH_SECTION, branch, ConfigConstants.CONFIG_KEY_MERGE, Constants.R_HEADS + branch);
-                config.save();
+                LOGGER.info("Creating new branch {}", branch);
+                git.checkout()
+                        .setName(branch)
+                        .setOrphan(true)
+                        .call();
             }
-
-            return git;
-        } catch (IOException | GitAPIException | URISyntaxException ex) {
-            throw new RuntimeException("Failed to init git repo.", ex);
+        } catch (IOException | GitAPIException ex) {
+            throw new RuntimeException("Failed to checkout branch " + branch, ex);
         }
     }
 
@@ -71,6 +75,7 @@ public class GitTasks {
                     .call();
             git.commit()
                     .setAuthor("SnowShovel", "snowshovel@javasauce.net")
+                    .setCommitter("SnowShovel", "snowshovel@javasauce.net")
                     .setAllowEmpty(true)
                     .setMessage(message)
                     .call();
@@ -80,10 +85,12 @@ public class GitTasks {
 
     }
 
-    public static void pushChanges(Git git) {
+    public static void pushAllBranches(Git git) {
         LOGGER.info("Pushing changes..");
         try {
             git.push()
+                    .setRemote("origin")
+                    .setPushAll()
                     .setProgressMonitor(new TextProgressMonitor())
                     .call();
         } catch (GitAPIException ex) {

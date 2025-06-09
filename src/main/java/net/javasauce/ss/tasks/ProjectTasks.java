@@ -119,7 +119,7 @@ public class ProjectTasks {
         );
     }
 
-    private static void emitReadme(Path projectDir) throws IOException {
+    public static void emitReadme(Path projectDir) throws IOException {
         Files.writeString(projectDir.resolve("README.md"), """
                 # Shoveled
                 Output of SnowShovel

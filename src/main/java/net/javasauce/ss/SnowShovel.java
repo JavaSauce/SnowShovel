@@ -7,6 +7,7 @@ import net.covers1624.curl4j.CABundle;
 import net.covers1624.curl4j.httpapi.Curl4jHttpEngine;
 import net.covers1624.jdkutils.JavaVersion;
 import net.covers1624.quack.collection.FastStream;
+import net.covers1624.quack.io.CopyingFileVisitor;
 import net.covers1624.quack.maven.MavenNotation;
 import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.tasks.*;
@@ -21,10 +22,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 
 import static java.util.List.of;
@@ -108,22 +111,36 @@ public class SnowShovel {
             return;
         }
 
-        for (VersionManifest manifest : manifests) {
-            LOGGER.info("Processing version {}", manifest.id());
-            Path versionDir = workDir.resolve("repos").resolve(manifest.id());
-            if (Files.exists(versionDir)) {
-                LOGGER.info("Cleaning existing clone.");
-                Files.walkFileTree(versionDir, new DeleteHierarchyVisitor());
+        var repoDir = workDir.resolve("repo");
+        // Stored in the main branch in the same folder name.
+        var cacheDir = workDir.resolve("cache");
+        var repoCacheDir = repoDir.resolve("cache");
+
+        Properties props = new Properties();
+        if (Files.exists(repoDir)) {
+            Files.walkFileTree(repoDir, new DeleteHierarchyVisitor());
+        }
+        try (Git git = GitTasks.setup(repoDir, gitRepo)) {
+            if (Files.exists(repoCacheDir)) {
+                Files.walkFileTree(repoCacheDir, new CopyingFileVisitor(repoCacheDir, cacheDir));
+            }
+            var dataProperties = cacheDir.resolve("versions.properties");
+            if (Files.exists(dataProperties)) {
+                try (Reader reader = Files.newBufferedReader(dataProperties)) {
+                    props.load(reader);
+                }
             }
 
-            try (Git git = GitTasks.initRepo(versionDir, gitRepo, manifest)) {
-                GitTasks.removeAllFiles(versionDir);
+            for (VersionManifest manifest : manifests) {
+                LOGGER.info("Processing version {}", manifest.id());
+                GitTasks.checkoutOrCreateBranch(git, branchNameForVersion(manifest));
+                GitTasks.removeAllFiles(repoDir);
 
                 CompletableFuture<Path> clientJar = manifest.requireDownloadAsync(http, versionsDir, "client", "jar");
                 CompletableFuture<Path> clientMappings = manifest.requireDownloadAsync(http, versionsDir, "client_mappings", "mojmap");
                 CompletableFuture.allOf(clientJar, clientMappings).join();
 
-                Path remappedJar = clientJar.join().resolveSibling(FilenameUtils.getBaseName(clientJar.toString()) + "-remapped.jar");
+                Path remappedJar = clientJar.join().resolveSibling(FilenameUtils.getBaseName(clientJar.join().toString()) + "-remapped.jar");
                 RemapperTasks.runRemapper(http, jdkProvider, toolsDir, clientJar.join(), remappedJar, clientMappings.join());
 
                 List<LibraryTasks.LibraryDownload> libraries = LibraryTasks.getVersionLibraries(manifest, librariesDir);
@@ -144,13 +161,38 @@ public class SnowShovel {
                                 .map(LibraryTasks.LibraryDownload::path)
                                 .toList(),
                         remappedJar,
-                        versionDir
+                        repoDir
                 );
-                ProjectTasks.generateProjectFiles(versionDir, javaVersion, libraries);
+                ProjectTasks.generateProjectFiles(repoDir, javaVersion, libraries);
                 GitTasks.stageAndCommit(git, "A commit!");
-                GitTasks.pushChanges(git);
             }
+
+            GitTasks.checkoutOrCreateBranch(git, "main");
+            if (Files.exists(cacheDir)) {
+                Files.walkFileTree(cacheDir, new CopyingFileVisitor(cacheDir, repoCacheDir));
+            }
+            ProjectTasks.emitReadme(repoDir); // TODO emit better readme.
+            Files.writeString(repoDir.resolve(".gitignore"), """
+                    # exclude all
+                    /*
+                    
+                    # Include Important Folders
+                    !cache/
+                    
+                    # Include git important files
+                    !.gitignore
+                    
+                    # Other files.
+                    !README.md
+                    """
+            );
+            GitTasks.stageAndCommit(git, "A commit!");
+            GitTasks.pushAllBranches(git);
         }
         LOGGER.info("Done!");
+    }
+
+    private static String branchNameForVersion(VersionManifest manifest) {
+        return manifest.type() + "/" + manifest.id();
     }
 }
