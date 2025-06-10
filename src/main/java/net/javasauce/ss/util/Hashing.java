@@ -13,6 +13,8 @@ import java.security.NoSuchAlgorithmException;
  */
 public class Hashing {
 
+    public static final String SHA1 = "SHA-1";
+
     public static String hashFile(String alg, Path file) throws IOException {
         MessageDigest digest = digest(alg);
         addFileBytes(digest, file);

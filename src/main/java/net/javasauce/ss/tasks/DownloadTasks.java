@@ -59,7 +59,7 @@ public class DownloadTasks {
         }
 
         if (sha1 != null) {
-            return Hashing.hashFile("SHA-1", file).equals(sha1);
+            return Hashing.hashFile(Hashing.SHA1, file).equals(sha1);
         }
 
         return true;
