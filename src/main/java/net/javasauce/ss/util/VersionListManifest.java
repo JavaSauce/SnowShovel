@@ -5,6 +5,7 @@ import net.covers1624.quack.collection.FastStream;
 import net.covers1624.quack.gson.JsonUtils;
 import net.covers1624.quack.net.HttpEngineDownloadAction;
 import net.covers1624.quack.net.httpapi.HttpEngine;
+import net.javasauce.ss.tasks.Tasks;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
@@ -32,12 +33,14 @@ public record VersionListManifest(
         Path file = versionsDir.resolve("version_manifest_v2.json");
 
         if (Files.notExists(file) || doUpdateIfExists) {
-            new HttpEngineDownloadAction(http)
-                    .setUrl(URL)
-                    .setDest(file)
-                    .setQuiet(false)
-                    .setUseETag(true)
-                    .execute();
+            Tasks.doWithRetry(10, () ->
+                    new HttpEngineDownloadAction(http)
+                            .setUrl(URL)
+                            .setDest(file)
+                            .setQuiet(false)
+                            .setUseETag(true)
+                            .execute()
+            );
         }
         return JsonUtils.parse(GSON, file, VersionListManifest.class);
     }

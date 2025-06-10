@@ -32,23 +32,25 @@ public class DownloadTasks {
     }
 
     public static Path downloadFile(HttpEngine http, String url, Path dest, long length, @Nullable String sha1) {
-        try {
-            if (Files.exists(dest)) {
-                if (validate(dest, length, sha1)) {
-                    return dest;
+        return Tasks.getWithRetry(10, () -> {
+            try {
+                if (Files.exists(dest)) {
+                    if (validate(dest, length, sha1)) {
+                        return dest;
+                    }
+                    LOGGER.warn("Download {} failed hash check. Will be re-downloaded.", dest);
                 }
-                LOGGER.warn("Download {} failed hash check. Will be re-downloaded.", dest);
-            }
 
-            doDownload(http, url, dest);
+                doDownload(http, url, dest);
 
-            if (!validate(dest, length, sha1)) {
-                throw new RuntimeException("Failed to validate file after download.");
+                if (!validate(dest, length, sha1)) {
+                    throw new RuntimeException("Failed to validate file after download.");
+                }
+                return dest;
+            } catch (IOException ex) {
+                throw new RuntimeException("Failed to download file.", ex);
             }
-        } catch (IOException ex) {
-            throw new RuntimeException("Failed to download file.", ex);
-        }
-        return dest;
+        });
     }
 
     private static boolean validate(Path file, long length, @Nullable String sha1) throws IOException {
