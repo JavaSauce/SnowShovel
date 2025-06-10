@@ -20,7 +20,7 @@ public class RemapperTasks {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RemapperTasks.class);
 
-    private static final MavenNotation REMAPPER_TOOL = MavenNotation.parse("net.covers1624:FastRemapper:0.3.2.16:all");
+    private static final MavenNotation REMAPPER_TOOL = MavenNotation.parse("net.covers1624:FastRemapper:0.3.2.17:all");
 
     public static void runRemapper(HttpEngine http, JdkProvider jdkProvider, Path toolsDir, Path input, Path output, Path mappings) throws IOException {
         Path remapperJar = DownloadTasks.downloadFile(http, REMAPPER_TOOL.toURL("https://maven.covers1624.net/").toString(), REMAPPER_TOOL.toPath(toolsDir));

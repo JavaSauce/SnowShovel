@@ -7,9 +7,7 @@ import net.javasauce.ss.util.VersionManifest;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -17,24 +15,17 @@ import java.util.concurrent.CompletableFuture;
  */
 public class VersionManifestTasks {
 
-
-    public static List<VersionManifest> getVersionManifests(HttpEngine http, Path versionsDir, List<String> versionIds) throws IOException {
-        VersionListManifest versionList = VersionListManifest.update(http, versionsDir);
-        Map<String, VersionListManifest.Version> mapLookup = versionList.versionsMap();
-        List<VersionListManifest.Version> versions = new ArrayList<>(versionIds.size());
-        for (String versionId : versionIds) {
-            VersionListManifest.Version version = mapLookup.get(versionId);
-            if (version == null) {
-                throw new RuntimeException("Version " + versionId + " is not a valid version.");
-            }
-            versions.add(version);
-        }
-
-        List<CompletableFuture<VersionManifest>> manifestFutures = FastStream.of(versions)
-                .map(version -> VersionManifest.updateFuture(http, versionsDir, version))
+    public static List<VersionManifest> allVersionsWithMappings(HttpEngine http, Path versionsDir, List<String> versionFilter, boolean doUpdateIfExists) throws IOException {
+        VersionListManifest versionList = VersionListManifest.update(http, versionsDir, doUpdateIfExists);
+        var futures = FastStream.of(versionList.versions())
+                .filter(e -> versionFilter.isEmpty() || versionFilter.contains(e.id()))
+                .map(e -> VersionManifest.updateFuture(http, versionsDir, e, doUpdateIfExists))
                 .toList();
-        return FastStream.of(manifestFutures)
+
+        return FastStream.of(futures)
                 .map(CompletableFuture::join)
+                .filter(e -> e.hasDownload("client") && e.hasDownload("client_mappings"))
+                .reversed()
                 .toList();
     }
 }

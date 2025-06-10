@@ -3,12 +3,12 @@ package net.javasauce.ss.util;
 import com.google.gson.Gson;
 import net.covers1624.quack.collection.FastStream;
 import net.covers1624.quack.gson.JsonUtils;
-import net.covers1624.quack.net.DownloadAction;
 import net.covers1624.quack.net.HttpEngineDownloadAction;
 import net.covers1624.quack.net.httpapi.HttpEngine;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Date;
 import java.util.List;
@@ -28,16 +28,17 @@ public record VersionListManifest(
     private static final Gson GSON = new Gson();
     private static final String URL = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
 
-    public static VersionListManifest update(HttpEngine http, Path versionsDir) throws IOException {
+    public static VersionListManifest update(HttpEngine http, Path versionsDir, boolean doUpdateIfExists) throws IOException {
         Path file = versionsDir.resolve("version_manifest_v2.json");
 
-        DownloadAction action = new HttpEngineDownloadAction(http)
-                .setUrl(URL)
-                .setDest(file)
-                .setQuiet(false)
-                .setUseETag(true)
-                .setOnlyIfModified(true);
-        action.execute();
+        if (Files.notExists(file) || doUpdateIfExists) {
+            new HttpEngineDownloadAction(http)
+                    .setUrl(URL)
+                    .setDest(file)
+                    .setQuiet(false)
+                    .setUseETag(true)
+                    .execute();
+        }
         return JsonUtils.parse(GSON, file, VersionListManifest.class);
     }
 

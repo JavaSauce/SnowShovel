@@ -49,7 +49,7 @@ public class SnowShovel {
 
         OptionSpec<Void> helpOpt = parser.acceptsAll(of("h", "help"), "Prints this help").forHelp();
 
-        OptionSpec<String> versionOpt = parser.acceptsAll(of("v", "version"), "Process one or more minecraft versions.")
+        OptionSpec<String> versionOpt = parser.acceptsAll(of("v", "version"), "Set the versions to process. Otherwise processes all.")
                 .withRequiredArg()
                 .withValuesSeparatedBy(",");
 
@@ -59,16 +59,12 @@ public class SnowShovel {
         OptionSpec<Void> gitPushOpt = parser.accepts("gitPush", "If SnowShovel should push to the repository.");
         OptionSpec<Void> gitCleanOpt = parser.accepts("gitClean", "If SnowShovel should delete the previous checkout (if available) before doing stuff.");
 
+        OptionSpec<Boolean> snowShovelUpdatedOpt = parser.accepts("snowShovelUpdated", "If SnowShovel has been updated since last run. Disables updating versions and decompiler")
+                .withRequiredArg()
+                .ofType(Boolean.class);
+
         OptionSet optSet = parser.parse(args);
         if (optSet.has(helpOpt)) {
-            parser.printHelpOn(System.err);
-            System.exit(1);
-            return;
-        }
-
-        List<String> versionIds = optSet.valuesOf(versionOpt);
-        if (versionIds.isEmpty()) {
-            LOGGER.error("One or more '--version' arguments required.");
             parser.printHelpOn(System.err);
             System.exit(1);
             return;
@@ -91,13 +87,12 @@ public class SnowShovel {
         }
         CredentialsProvider.setDefault(new UsernamePasswordCredentialsProvider(gitUser, gitPass));
 
-        LOGGER.info("ShowShovel started for versions {}.", versionIds);
         var ss = new SnowShovel(
                 Path.of(".").toAbsolutePath().normalize(),
                 optSet.has(gitPushOpt),
                 optSet.has(gitCleanOpt)
         );
-        ss.run(gitRepo, versionIds);
+        ss.run(gitRepo, optSet.has(snowShovelUpdatedOpt), optSet.valuesOf(versionOpt));
     }
 
     private static final Gson GSON = new GsonBuilder()
@@ -129,26 +124,9 @@ public class SnowShovel {
         cacheDir = workDir.resolve("cache");
     }
 
-    private void run(String gitRepo, List<String> versionIds) throws IOException {
+    private void run(String gitRepo, boolean snowShovelUpdated, List<String> versionFilter) throws IOException {
         HttpEngine http = new Curl4jHttpEngine(CABundle.builtIn());
         JdkProvider jdkProvider = new JdkProvider(toolsDir.resolve("jdks/"), http);
-
-        LOGGER.info("Downloading version manifests..");
-        List<VersionManifest> manifests = VersionManifestTasks.getVersionManifests(http, versionsDir, versionIds);
-        boolean error = false;
-        for (VersionManifest manifest : manifests) {
-            for (String download : of("client", "client_mappings")) {
-                if (!manifest.hasDownload(download)) {
-                    LOGGER.error("Version {} does not have a '{}' download.", manifest.id(), download);
-                    error = true;
-                }
-            }
-        }
-        if (error) {
-            LOGGER.error("One or more errors validating selected versions.");
-            System.exit(1);
-            return;
-        }
 
         if (shouldClean && Files.exists(repoDir)) {
             Files.walkFileTree(repoDir, new DeleteHierarchyVisitor());
@@ -156,6 +134,8 @@ public class SnowShovel {
         try (Git git = GitTasks.setup(repoDir, gitRepo)) {
             Map<String, String> data = pullCache();
 
+            List<VersionManifest> manifests = VersionManifestTasks.allVersionsWithMappings(http, cacheDir, versionFilter, !snowShovelUpdated);
+            LOGGER.info("Identified {} versions with manifests.", manifests.size());
             for (VersionManifest manifest : manifests) {
                 LOGGER.info("Processing version {}", manifest.id());
                 GitTasks.checkoutOrCreateBranch(git, branchNameForVersion(manifest));
@@ -188,7 +168,7 @@ public class SnowShovel {
                         remappedJar,
                         repoDir
                 );
-                ProjectTasks.generateProjectFiles(repoDir, javaVersion, libraries);
+                ProjectTasks.generateProjectFiles(librariesDir, http, repoDir, javaVersion, libraries);
                 GitTasks.stageAndCommit(git, "A commit!");
             }
 

@@ -9,13 +9,13 @@ import net.covers1624.quack.gson.JsonUtils;
 import net.covers1624.quack.gson.LowerCaseEnumAdapterFactory;
 import net.covers1624.quack.gson.MavenNotationAdapter;
 import net.covers1624.quack.maven.MavenNotation;
-import net.covers1624.quack.net.DownloadAction;
-import net.covers1624.quack.net.HttpEngineDownloadAction;
 import net.covers1624.quack.net.httpapi.HttpEngine;
+import net.javasauce.ss.tasks.DownloadTasks;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.lang.reflect.Type;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -49,26 +49,22 @@ public record VersionManifest(
             .registerTypeAdapter(MavenNotation.class, new MavenNotationAdapter())
             .create();
 
-    public static CompletableFuture<VersionManifest> updateFuture(HttpEngine http, Path versionsDir, VersionListManifest.Version version) {
+    public static CompletableFuture<VersionManifest> updateFuture(HttpEngine http, Path versionsDir, VersionListManifest.Version version, boolean doUpdateIfExists) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                return update(http, versionsDir, version);
+                return update(http, versionsDir, version, doUpdateIfExists);
             } catch (IOException ex) {
                 throw new RuntimeException("Failed to update version.", ex);
             }
         });
     }
 
-    public static VersionManifest update(HttpEngine http, Path versionsDir, VersionListManifest.Version version) throws IOException {
+    public static VersionManifest update(HttpEngine http, Path versionsDir, VersionListManifest.Version version, boolean doUpdateIfExists) throws IOException {
         Path file = versionsDir.resolve(version.id() + "/" + version.id() + ".json");
 
-        DownloadAction action = new HttpEngineDownloadAction(http)
-                .setUrl(version.url())
-                .setDest(file)
-                .setQuiet(false)
-                .setUseETag(true)
-                .setOnlyIfModified(true);
-        action.execute();
+        if (Files.notExists(file) || doUpdateIfExists) {
+            DownloadTasks.downloadFile(http, version.url(), file, -1, version.sha1());
+        }
         return JsonUtils.parse(GSON, file, VersionManifest.class);
     }
 
@@ -77,13 +73,7 @@ public record VersionManifest(
         if (download == null) throw new RuntimeException("Missing download " + downloadName);
 
         Path file = versionsDir.resolve(id() + "/" + id() + "-" + downloadName + "." + fileExtension);
-        DownloadAction action = new HttpEngineDownloadAction(http)
-                .setUrl(download.url())
-                .setDest(file)
-                .setQuiet(false)
-                .setUseETag(true)
-                .setOnlyIfModified(true);
-        action.execute();
+        DownloadTasks.downloadFile(http, download.url(), file, download.size(), download.sha1());
         return file;
     }
 
