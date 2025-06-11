@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -21,30 +22,40 @@ public class DecompileTasks {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DecompileTasks.class);
 
-    private static final MavenNotation DECOMPILER_TOOL = MavenNotation.parse("net.javasauce:Decompiler:0@zip");
+    private static final MavenNotation DECOMPILER_TEST_TOOL = MavenNotation.parse("net.javasauce:Decompiler:0:testframework@zip");
 
-    public static void decompileJar(HttpEngine http, JdkProvider jdkProvider, Path toolsDir, String decompilerVersion, JavaVersion javaVersion, List<Path> libraries, Path inputJar, Path versionDir) {
-        MavenNotation artifact = DECOMPILER_TOOL.withVersion(decompilerVersion);
+    public static void decompileAndTest(HttpEngine http, JdkProvider jdkProvider, Path toolsDir, String decompilerVersion, JavaVersion javaVersion, List<Path> libraries, Path inputJar, Path versionDir) {
+        MavenNotation artifact = DECOMPILER_TEST_TOOL.withVersion(decompilerVersion);
         Path distZip = DownloadTasks.downloadFile(http, artifact.toURL("https://maven.covers1624.net").toString(), artifact.toPath(toolsDir));
-        Path decompilerJar = ToolTasks.extractTool(toolsDir, artifact, distZip);
+        Path toolJar = ToolTasks.extractTool(toolsDir, artifact, distZip);
 
         Path javaHome = jdkProvider.findOrProvisionJdk(javaVersion);
+        List<Path> libraryPath = new ArrayList<>();
+        libraryPath.add(inputJar);
+        libraryPath.addAll(libraries);
 
         var procResult = ProcessUtils.runProcess(
                 JavaInstall.getJavaExecutable(javaHome, true),
                 List.of(
                         "-ea", "-XX:-OmitStackTraceInFastThrow",
-                        "-jar", decompilerJar.toAbsolutePath().toString(),
-                        "--output", versionDir.resolve("src/main/java").toAbsolutePath().toString(),
-                        "--output-ast", versionDir.resolve("src/main/ast").toAbsolutePath().toString(),
-                        "--input", inputJar.toAbsolutePath().toString(),
-                        "--lib", FastStream.of(libraries)
+                        "-Dcoffeegrinder.testcases.library=true",
+                        "-Dcoffeegrinder.testcases.library.update_defs=true",
+                        "-Dcoffeegrinder.test.update=true",
+                        "-Dcoffeegrinder.test.output=" + versionDir.resolve("src/main/java").toAbsolutePath(),
+                        "-Dcoffeegrinder.test.defs=" + versionDir.resolve("test_defs.json").toAbsolutePath(),
+                        "-Dcoffeegrinder.test.stats=" + versionDir.resolve("src/main/resources/test_stats.json").toAbsolutePath(),
+                        "-Dcoffeegrinder.test.classes=" + inputJar.toAbsolutePath(),
+                        "-Dcoffeegrinder.test.libraries=" + FastStream.of(libraryPath)
                                 .map(Path::toAbsolutePath)
                                 .map(Path::toString)
                                 .join(File.pathSeparator),
-                        "--report", versionDir.resolve("decompile_report.txt").toAbsolutePath().toString()
+                        "-jar", toolJar.toAbsolutePath().toString(),
+                        "execute",
+                        "--scan-classpath",
+                        "--include-engine", "testcase-library-engine",
+                        "--details=summary"
                 ),
-                decompilerJar.getParent(),
+                toolJar.getParent(),
                 LOGGER::info
         );
     }

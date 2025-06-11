@@ -5,7 +5,9 @@ import net.covers1624.quack.io.IOUtils;
 import net.covers1624.quack.io.IndentPrintWriter;
 import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.tasks.LibraryTasks.LibraryDownload;
-import net.javasauce.ss.util.ProcessUtils;
+import net.javasauce.ss.tasks.report.GenerateReportTask;
+import net.javasauce.ss.tasks.report.TestCaseDef;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,6 +15,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Created by covers1624 on 1/21/25.
@@ -26,12 +29,12 @@ public class ProjectTasks {
     private static final long GRADLE_WRAPPER_DIST_LEN = 44825;
     private static final String GRADLE_WRAPPER_DIST_HASH = "2e355d2ede2307bfe40330db29f52b9b729fd9b2";
 
-    public static void generateProjectFiles(Path librariesDir, HttpEngine http, Path projectDir, JavaVersion javaVersion, List<LibraryDownload> libraries) throws IOException {
+    public static void generateProjectFiles(Path librariesDir, HttpEngine http, Path projectDir, JavaVersion javaVersion, List<LibraryDownload> libraries, String mcVersion, @Nullable TestCaseDef testStats) throws IOException {
         LOGGER.info("Configuring project..");
         emitBuildGradle(projectDir, javaVersion, libraries);
         emitSettingsGradle(projectDir);
         emitGitIgnore(projectDir);
-        emitReadme(projectDir);
+        emitReadme(projectDir, mcVersion, testStats);
         var zip = DownloadTasks.downloadFile(
                 http,
                 GRADLE_WRAPPER_DIST,
@@ -126,11 +129,15 @@ public class ProjectTasks {
         );
     }
 
-    private static void emitReadme(Path projectDir) throws IOException {
-        Files.writeString(projectDir.resolve("README.md"), """
+    private static void emitReadme(Path projectDir, String mcVersion, @Nullable TestCaseDef testStats) throws IOException {
+        var readme = """
                 # Shoveled
                 Output of SnowShovel
-                """
-        );
+                """;
+        if (testStats != null) {
+            readme += GenerateReportTask.generateReport(Map.of(mcVersion, testStats));
+        }
+
+        Files.writeString(projectDir.resolve("README.md"), readme);
     }
 }

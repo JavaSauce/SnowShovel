@@ -14,6 +14,8 @@ import net.covers1624.quack.gson.JsonUtils;
 import net.covers1624.quack.io.CopyingFileVisitor;
 import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.tasks.*;
+import net.javasauce.ss.tasks.report.GenerateReportTask;
+import net.javasauce.ss.tasks.report.TestCaseDef;
 import net.javasauce.ss.util.DeleteHierarchyVisitor;
 import net.javasauce.ss.util.JdkProvider;
 import net.javasauce.ss.util.VersionManifest;
@@ -30,6 +32,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -134,6 +137,8 @@ public class SnowShovel {
         try (Git git = GitTasks.setup(repoDir, gitRepo)) {
             Map<String, String> data = pullCache();
 
+            LinkedHashMap<String, TestCaseDef> testStats = new LinkedHashMap<>();
+
             List<VersionManifest> manifests = VersionManifestTasks.allVersionsWithMappings(http, cacheDir, versionFilter, !snowShovelUpdated);
             LOGGER.info("Identified {} versions with manifests.", manifests.size());
             for (VersionManifest manifest : manifests) {
@@ -156,11 +161,11 @@ public class SnowShovel {
                     javaVersion = JavaVersion.JAVA_1_8;
                 }
 
-                DecompileTasks.decompileJar(
+                DecompileTasks.decompileAndTest(
                         http,
                         jdkProvider,
                         toolsDir,
-                        "0.0.10",
+                        "0.0.14",
                         javaVersion,
                         FastStream.of(libraries)
                                 .map(LibraryTasks.LibraryDownload::path)
@@ -168,14 +173,18 @@ public class SnowShovel {
                         remappedJar,
                         repoDir
                 );
-                ProjectTasks.generateProjectFiles(librariesDir, http, repoDir, javaVersion, libraries);
+                var stats = GenerateReportTask.loadTestStats(repoDir);
+                if (stats != null) {
+                    testStats.put(manifest.id(), stats);
+                }
+                ProjectTasks.generateProjectFiles(librariesDir, http, repoDir, javaVersion, libraries, manifest.id(), stats);
                 GitTasks.stageAndCommit(git, "A commit!");
             }
 
             GitTasks.checkoutOrCreateBranch(git, "main");
             pushCache(data);
             emitMainGitignore();
-            emitMainReadme();
+            emitMainReadme(testStats.reversed());
 
             GitTasks.stageAndCommit(git, "A commit!");
             if (shouldPush) {
@@ -228,13 +237,14 @@ public class SnowShovel {
         );
     }
 
-    // TODO better readme for main branch.
-    private void emitMainReadme() throws IOException {
-        Files.writeString(repoDir.resolve("README.md"), """
+    private void emitMainReadme(Map<String, TestCaseDef> testStats) throws IOException {
+        String readme = """
                 # Shoveled
                 Output of SnowShovel
-                """
-        );
+                """;
+        readme += GenerateReportTask.generateReport(testStats);
+
+        Files.writeString(repoDir.resolve("README.md"), readme);
     }
 
     private static String branchNameForVersion(VersionManifest manifest) {
