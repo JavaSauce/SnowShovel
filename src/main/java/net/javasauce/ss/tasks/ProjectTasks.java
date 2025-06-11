@@ -3,6 +3,7 @@ package net.javasauce.ss.tasks;
 import net.covers1624.jdkutils.JavaVersion;
 import net.covers1624.quack.io.IOUtils;
 import net.covers1624.quack.io.IndentPrintWriter;
+import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.tasks.LibraryTasks.LibraryDownload;
 import net.javasauce.ss.util.ProcessUtils;
 import org.slf4j.Logger;
@@ -20,19 +21,25 @@ public class ProjectTasks {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ProjectTasks.class);
 
-    public static void generateProjectFiles(Path projectDir, JavaVersion javaVersion, List<LibraryDownload> libraries) throws IOException {
+    // Sick of waiting for `gradle wrapper --gradle-version blah`, just ran it and put it on a web server lol.
+    private static final String GRADLE_WRAPPER_DIST = "https://covers1624.net/Files/GradleWrapper-8.10.2.zip";
+    private static final long GRADLE_WRAPPER_DIST_LEN = 44825;
+    private static final String GRADLE_WRAPPER_DIST_HASH = "2e355d2ede2307bfe40330db29f52b9b729fd9b2";
+
+    public static void generateProjectFiles(Path librariesDir, HttpEngine http, Path projectDir, JavaVersion javaVersion, List<LibraryDownload> libraries) throws IOException {
         LOGGER.info("Configuring project..");
         emitBuildGradle(projectDir, javaVersion, libraries);
         emitSettingsGradle(projectDir);
         emitGitIgnore(projectDir);
         emitReadme(projectDir);
-        var procResult = ProcessUtils.runProcess(
-                "gradle",
-                List.of("wrapper", "--gradle-version", "8.10.2"),
-                projectDir,
-                LOGGER::info
+        var zip = DownloadTasks.downloadFile(
+                http,
+                GRADLE_WRAPPER_DIST,
+                librariesDir.resolve("GradleWrapper.zip"),
+                GRADLE_WRAPPER_DIST_LEN,
+                GRADLE_WRAPPER_DIST_HASH
         );
-        procResult.assertExitCode(0);
+        ZipTasks.extractZip(zip, projectDir);
     }
 
     private static void emitBuildGradle(Path projectDir, JavaVersion javaVersion, List<LibraryDownload> libraries) throws IOException {
