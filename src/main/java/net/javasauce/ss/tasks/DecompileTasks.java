@@ -26,8 +26,9 @@ public class DecompileTasks {
 
     public static void decompileAndTest(HttpEngine http, JdkProvider jdkProvider, Path toolsDir, String decompilerVersion, JavaVersion javaVersion, List<Path> libraries, Path inputJar, Path versionDir) {
         MavenNotation artifact = DECOMPILER_TEST_TOOL.withVersion(decompilerVersion);
-        Path distZip = DownloadTasks.downloadFile(http, artifact.toURL("https://maven.covers1624.net").toString(), artifact.toPath(toolsDir));
-        Path toolJar = ToolTasks.extractTool(toolsDir, artifact, distZip);
+
+        Path distZip = DownloadTasks.downloadFileWithMavenLocalFallback(http, "https://maven.covers1624.net", artifact, toolsDir);
+        Path toolJar = ToolTasks.extractTool(toolsDir, artifact, distZip, !artifact.version.contains("SNAPSHOT"));
 
         Path javaHome = jdkProvider.findOrProvisionJdk(javaVersion);
         List<Path> libraryPath = new ArrayList<>();

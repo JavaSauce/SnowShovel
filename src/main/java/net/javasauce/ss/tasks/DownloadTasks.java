@@ -1,5 +1,7 @@
 package net.javasauce.ss.tasks;
 
+import net.covers1624.quack.io.IOUtils;
+import net.covers1624.quack.maven.MavenNotation;
 import net.covers1624.quack.net.HttpEngineDownloadAction;
 import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.util.Hashing;
@@ -10,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -25,6 +28,26 @@ public class DownloadTasks {
 
     public static CompletableFuture<Path> downloadFileAsync(HttpEngine http, String url, Path dest, long length, @Nullable String sha1) {
         return CompletableFuture.supplyAsync(() -> downloadFile(http, url, dest, length, sha1));
+    }
+
+    public static Path downloadFileWithMavenLocalFallback(HttpEngine http, String mavenRepo, MavenNotation notation, Path librariesDir) {
+        LOGGER.info("Downloading maven artifact {}", notation);
+        Path output = notation.toPath(librariesDir);
+        String userHome = System.getProperty("user.home");
+        if (userHome != null) {
+            Path mavenLocalFile = notation.toPath(Path.of(userHome).resolve(".m2/repository"));
+            if (Files.exists(mavenLocalFile)) {
+                LOGGER.info(" Found compatible artifact in MavenLocal, using that.");
+                try {
+                    Files.copy(mavenLocalFile, IOUtils.makeParents(output), StandardCopyOption.REPLACE_EXISTING);
+                    return output;
+                } catch (IOException ex) {
+                    throw new RuntimeException("Failed to copy file from maven local.", ex);
+                }
+            }
+        }
+
+        return downloadFile(http, notation.toURL(mavenRepo).toString(), output);
     }
 
     public static Path downloadFile(HttpEngine http, String url, Path dest) {

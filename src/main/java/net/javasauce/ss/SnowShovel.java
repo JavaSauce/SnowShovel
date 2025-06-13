@@ -23,6 +23,7 @@ import org.apache.commons.io.FilenameUtils;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.transport.CredentialsProvider;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
+import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,6 +58,9 @@ public class SnowShovel {
                 .withValuesSeparatedBy(",");
 
         OptionSpec<String> gitRepoOpt = parser.acceptsAll(of("r", "repo"), "The git repository to use.")
+                .withRequiredArg();
+
+        OptionSpec<String> decompilerVersionOpt = parser.accepts("decompiler-version", "Set the decompiler version to use. Otherwise use the latest available version on Maven.")
                 .withRequiredArg();
 
         OptionSpec<Void> gitPushOpt = parser.accepts("gitPush", "If SnowShovel should push to the repository.");
@@ -95,7 +99,7 @@ public class SnowShovel {
                 optSet.has(gitPushOpt),
                 optSet.has(gitCleanOpt)
         );
-        ss.run(gitRepo, optSet.has(snowShovelUpdatedOpt), optSet.valuesOf(versionOpt));
+        ss.run(gitRepo, optSet.has(snowShovelUpdatedOpt), optSet.valuesOf(versionOpt), optSet.valueOf(decompilerVersionOpt));
     }
 
     private static final Gson GSON = new GsonBuilder()
@@ -127,7 +131,7 @@ public class SnowShovel {
         cacheDir = workDir.resolve("cache");
     }
 
-    private void run(String gitRepo, boolean snowShovelUpdated, List<String> versionFilter) throws IOException {
+    private void run(String gitRepo, boolean snowShovelUpdated, List<String> versionFilter, @Nullable String decompilerVersion) throws IOException {
         HttpEngine http = new Curl4jHttpEngine(CABundle.builtIn());
         JdkProvider jdkProvider = new JdkProvider(toolsDir.resolve("jdks/"), http);
 
@@ -165,7 +169,7 @@ public class SnowShovel {
                         http,
                         jdkProvider,
                         toolsDir,
-                        "0.0.14",
+                        decompilerVersion != null ? decompilerVersion : "0.0.14", // TODO use latest, or version in metadata.
                         javaVersion,
                         FastStream.of(libraries)
                                 .map(LibraryTasks.LibraryDownload::path)
