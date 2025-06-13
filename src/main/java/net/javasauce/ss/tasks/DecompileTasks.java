@@ -43,6 +43,8 @@ public class DecompileTasks {
                         "-Dcoffeegrinder.testcases.library.update_defs=true",
                         "-Dcoffeegrinder.test.update=true",
                         "-Dcoffeegrinder.test.output=" + versionDir.resolve("src/main/java").toAbsolutePath(),
+                        "-Dcoffeegrinder.test.compile_error_output=" + versionDir.resolve("src/main/java").toAbsolutePath(),
+                        "-Dcoffeegrinder.test.rt_diff_output=" + versionDir.resolve("src/main/java").toAbsolutePath(),
                         "-Dcoffeegrinder.test.defs=" + versionDir.resolve("test_defs.json").toAbsolutePath(),
                         "-Dcoffeegrinder.test.stats=" + versionDir.resolve("src/main/resources/test_stats.json").toAbsolutePath(),
                         "-Dcoffeegrinder.test.classes=" + inputJar.toAbsolutePath(),
