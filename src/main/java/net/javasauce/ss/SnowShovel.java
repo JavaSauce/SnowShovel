@@ -12,12 +12,14 @@ import net.covers1624.jdkutils.JavaVersion;
 import net.covers1624.quack.collection.FastStream;
 import net.covers1624.quack.gson.JsonUtils;
 import net.covers1624.quack.io.CopyingFileVisitor;
+import net.covers1624.quack.maven.MavenNotation;
 import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.tasks.*;
 import net.javasauce.ss.tasks.report.GenerateReportTask;
 import net.javasauce.ss.tasks.report.TestCaseDef;
 import net.javasauce.ss.util.DeleteHierarchyVisitor;
 import net.javasauce.ss.util.JdkProvider;
+import net.javasauce.ss.util.ToolProvider;
 import net.javasauce.ss.util.VersionManifest;
 import org.apache.commons.io.FilenameUtils;
 import org.eclipse.jgit.api.Git;
@@ -121,6 +123,9 @@ public class SnowShovel {
     public final HttpEngine http;
     public final JdkProvider jdkProvider;
 
+    public final ToolProvider fastRemapper;
+    public final ToolProvider decompiler;
+
     public SnowShovel(Path workDir, boolean shouldPush, boolean shouldClean) {
         this.workDir = workDir;
         this.shouldPush = shouldPush;
@@ -134,6 +139,10 @@ public class SnowShovel {
         cacheDir = workDir.resolve("cache");
         http = new Curl4jHttpEngine(CABundle.builtIn());
         jdkProvider = new JdkProvider(toolsDir.resolve("jdks/"), http);
+
+        fastRemapper = new ToolProvider(this, MavenNotation.parse("net.covers1624:FastRemapper:0:all"));
+        decompiler = new ToolProvider(this, MavenNotation.parse("net.javasauce:Decompiler:0:testframework@zip"))
+                .enableExtraction();
     }
 
     private void run(String gitRepo, boolean snowShovelUpdated, List<String> versionFilter, @Nullable String decompilerVersion) throws IOException {
@@ -159,6 +168,12 @@ public class SnowShovel {
             // Find the versions we are targeting.
             List<VersionManifest> manifests = VersionManifestTasks.allVersionsWithMappings(this, versionFilter, !snowShovelUpdated);
             LOGGER.info("Identified {} versions with manifests.", manifests.size());
+
+            // Trigger a resolve of FastRemapper and the decompiler. No real reason for doing it here specifically, other than to keep the logs clean.
+            // Things should lock here pretty well whilst they complete async.
+            fastRemapper.resolveWithVersion("0.3.2.18");
+            decompiler.resolveWithVersion(decompilerVersion != null ? decompilerVersion : "0.0.14");
+
             for (VersionManifest manifest : manifests) {
                 LOGGER.info("Processing version {}", manifest.id());
                 // Checkout or create a branch for this version.
@@ -185,7 +200,6 @@ public class SnowShovel {
                 JavaVersion javaVersion = manifest.computeJavaVersion();
                 DecompileTasks.decompileAndTest(
                         this,
-                        decompilerVersion != null ? decompilerVersion : "0.0.14", // TODO use latest, or version in metadata.
                         javaVersion,
                         FastStream.of(libraries)
                                 .map(LibraryTasks.LibraryDownload::path)

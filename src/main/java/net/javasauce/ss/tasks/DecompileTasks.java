@@ -4,9 +4,7 @@ import net.covers1624.jdkutils.JavaInstall;
 import net.covers1624.jdkutils.JavaVersion;
 import net.covers1624.quack.collection.FastStream;
 import net.covers1624.quack.maven.MavenNotation;
-import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.SnowShovel;
-import net.javasauce.ss.util.JdkProvider;
 import net.javasauce.ss.util.ProcessUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,13 +21,8 @@ public class DecompileTasks {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DecompileTasks.class);
 
-    private static final MavenNotation DECOMPILER_TEST_TOOL = MavenNotation.parse("net.javasauce:Decompiler:0:testframework@zip");
-
-    public static void decompileAndTest(SnowShovel ss, String decompilerVersion, JavaVersion javaVersion, List<Path> libraries, Path inputJar, Path versionDir) {
-        MavenNotation artifact = DECOMPILER_TEST_TOOL.withVersion(decompilerVersion);
-
-        Path distZip = DownloadTasks.downloadFileWithMavenLocalFallback(ss.http, "https://maven.covers1624.net", artifact, ss.toolsDir);
-        Path toolJar = ToolTasks.extractTool(ss.toolsDir, artifact, distZip, !artifact.version.contains("SNAPSHOT"));
+    public static void decompileAndTest(SnowShovel ss, JavaVersion javaVersion, List<Path> libraries, Path inputJar, Path versionDir) {
+        Path toolJar = ss.decompiler.getTool();
 
         Path javaHome = ss.jdkProvider.findOrProvisionJdk(javaVersion);
         List<Path> libraryPath = new ArrayList<>();

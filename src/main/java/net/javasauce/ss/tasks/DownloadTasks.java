@@ -30,7 +30,11 @@ public class DownloadTasks {
         return CompletableFuture.supplyAsync(() -> downloadFile(http, url, dest, length, sha1));
     }
 
-    public static Path downloadFileWithMavenLocalFallback(HttpEngine http, String mavenRepo, MavenNotation notation, Path librariesDir) {
+    public static CompletableFuture<Path> downloadMavenArtifactAsync(HttpEngine http, String mavenRepo, MavenNotation notation, Path librariesDir) {
+        return CompletableFuture.supplyAsync(() -> downloadMavenArtifact(http, mavenRepo, notation, librariesDir));
+    }
+
+    public static Path downloadMavenArtifact(HttpEngine http, String mavenRepo, MavenNotation notation, Path librariesDir) {
         LOGGER.info("Downloading maven artifact {}", notation);
         Path output = notation.toPath(librariesDir);
         String userHome = System.getProperty("user.home");

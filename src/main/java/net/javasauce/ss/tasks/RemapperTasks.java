@@ -22,11 +22,9 @@ public class RemapperTasks {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RemapperTasks.class);
 
-    private static final MavenNotation REMAPPER_TOOL = MavenNotation.parse("net.covers1624:FastRemapper:0.3.2.18:all");
-
     public static void runRemapper(SnowShovel ss, Path input, Path mappings, Path output) throws IOException {
-        Path remapperJar = DownloadTasks.downloadFile(ss.http, REMAPPER_TOOL.toURL("https://maven.covers1624.net/").toString(), REMAPPER_TOOL.toPath(ss.toolsDir));
-        LOGGER.info("Remapping {} with {}", input, REMAPPER_TOOL);
+        Path remapperJar = ss.fastRemapper.getTool();
+        LOGGER.info("Remapping {} with {}", input, ss.fastRemapper.notation());
 
         Path hashOutput = output.resolveSibling(output.getFileName() + ".sha1");
         if (Files.exists(output) && Files.exists(hashOutput)) {
