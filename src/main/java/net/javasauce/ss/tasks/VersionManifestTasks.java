@@ -2,6 +2,7 @@ package net.javasauce.ss.tasks;
 
 import net.covers1624.quack.collection.FastStream;
 import net.covers1624.quack.net.httpapi.HttpEngine;
+import net.javasauce.ss.SnowShovel;
 import net.javasauce.ss.util.VersionListManifest;
 import net.javasauce.ss.util.VersionManifest;
 
@@ -15,11 +16,11 @@ import java.util.concurrent.CompletableFuture;
  */
 public class VersionManifestTasks {
 
-    public static List<VersionManifest> allVersionsWithMappings(HttpEngine http, Path versionsDir, List<String> versionFilter, boolean doUpdateIfExists) throws IOException {
-        VersionListManifest versionList = VersionListManifest.update(http, versionsDir, doUpdateIfExists);
+    public static List<VersionManifest> allVersionsWithMappings(SnowShovel ss, List<String> versionFilter, boolean doUpdateIfExists) throws IOException {
+        VersionListManifest versionList = VersionListManifest.update(ss.http, ss.cacheDir, doUpdateIfExists);
         var futures = FastStream.of(versionList.versions())
                 .filter(e -> versionFilter.isEmpty() || versionFilter.contains(e.id()))
-                .map(e -> VersionManifest.updateFuture(http, versionsDir, e, doUpdateIfExists))
+                .map(e -> VersionManifest.updateFuture(ss.http, ss.cacheDir, e, doUpdateIfExists))
                 .toList();
 
         return FastStream.of(futures)

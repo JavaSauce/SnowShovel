@@ -3,9 +3,8 @@ package net.javasauce.ss.tasks;
 import net.covers1624.jdkutils.JavaInstall;
 import net.covers1624.jdkutils.JavaVersion;
 import net.covers1624.quack.maven.MavenNotation;
-import net.covers1624.quack.net.httpapi.HttpEngine;
+import net.javasauce.ss.SnowShovel;
 import net.javasauce.ss.util.Hashing;
-import net.javasauce.ss.util.JdkProvider;
 import net.javasauce.ss.util.ProcessUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,8 +24,8 @@ public class RemapperTasks {
 
     private static final MavenNotation REMAPPER_TOOL = MavenNotation.parse("net.covers1624:FastRemapper:0.3.2.18:all");
 
-    public static void runRemapper(HttpEngine http, JdkProvider jdkProvider, Path toolsDir, Path input, Path output, Path mappings) throws IOException {
-        Path remapperJar = DownloadTasks.downloadFile(http, REMAPPER_TOOL.toURL("https://maven.covers1624.net/").toString(), REMAPPER_TOOL.toPath(toolsDir));
+    public static void runRemapper(SnowShovel ss, Path input, Path mappings, Path output) throws IOException {
+        Path remapperJar = DownloadTasks.downloadFile(ss.http, REMAPPER_TOOL.toURL("https://maven.covers1624.net/").toString(), REMAPPER_TOOL.toPath(ss.toolsDir));
         LOGGER.info("Remapping {} with {}", input, REMAPPER_TOOL);
 
         Path hashOutput = output.resolveSibling(output.getFileName() + ".sha1");
@@ -37,7 +36,7 @@ public class RemapperTasks {
             }
         }
 
-        Path javaHome = jdkProvider.findOrProvisionJdk(JavaVersion.JAVA_17);
+        Path javaHome = ss.jdkProvider.findOrProvisionJdk(JavaVersion.JAVA_17);
         var procResult = ProcessUtils.runProcess(
                 JavaInstall.getJavaExecutable(javaHome, true),
                 List.of(
@@ -45,10 +44,10 @@ public class RemapperTasks {
                         remapperJar.toAbsolutePath().toString(),
                         "--input",
                         input.toAbsolutePath().toString(),
-                        "--output",
-                        output.toAbsolutePath().toString(),
                         "--mappings",
                         mappings.toAbsolutePath().toString(),
+                        "--output",
+                        output.toAbsolutePath().toString(),
                         "--flip",
                         "--fix-locals",
                         "--fix-source",

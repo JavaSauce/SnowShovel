@@ -107,16 +107,19 @@ public class SnowShovel {
             .create();
     private static final Type MAP_STRING_TYPE = new TypeToken<Map<String, String>>() { }.getType();
 
-    private final Path workDir;
-    private final boolean shouldPush;
-    private final boolean shouldClean;
+    public final Path workDir;
+    public final boolean shouldPush;
+    public final boolean shouldClean;
 
-    private final Path versionsDir;
-    private final Path librariesDir;
-    private final Path toolsDir;
+    public final Path versionsDir;
+    public final Path librariesDir;
+    public final Path toolsDir;
 
-    private final Path repoDir;
-    private final Path cacheDir;
+    public final Path repoDir;
+    public final Path cacheDir;
+
+    public final HttpEngine http;
+    public final JdkProvider jdkProvider;
 
     public SnowShovel(Path workDir, boolean shouldPush, boolean shouldClean) {
         this.workDir = workDir;
@@ -129,46 +132,59 @@ public class SnowShovel {
 
         repoDir = workDir.resolve("repo");
         cacheDir = workDir.resolve("cache");
+        http = new Curl4jHttpEngine(CABundle.builtIn());
+        jdkProvider = new JdkProvider(toolsDir.resolve("jdks/"), http);
     }
 
     private void run(String gitRepo, boolean snowShovelUpdated, List<String> versionFilter, @Nullable String decompilerVersion) throws IOException {
-        HttpEngine http = new Curl4jHttpEngine(CABundle.builtIn());
-        JdkProvider jdkProvider = new JdkProvider(toolsDir.resolve("jdks/"), http);
-
+        // Nuke the repo if we are told to start from scratch.
         if (shouldClean && Files.exists(repoDir)) {
             Files.walkFileTree(repoDir, new DeleteHierarchyVisitor());
         }
+        // Initialize the git repo, this will either clone, set up a local repo, or switch to the Main branch ready to work.
         try (Git git = GitTasks.setup(repoDir, gitRepo)) {
+            // Pull the versions cache and properties from the main branch.
             Map<String, String> data = pullCache();
 
+            // TODO load these initially from the cached existing file on each branch.
+            //      We will need this for partial updates, so the main branch stats stay consistent.
             LinkedHashMap<String, TestCaseDef> testStats = new LinkedHashMap<>();
 
-            List<VersionManifest> manifests = VersionManifestTasks.allVersionsWithMappings(http, cacheDir, versionFilter, !snowShovelUpdated);
+            // TODO in automatic mode we need to figure out what has changed. It will either be:
+            //      - a new Minecraft Version
+            //      - a Minecraft Version change
+            //      - a SnowShovel update (FastRemapper or other change)
+            //      - a Decompiler update
+
+            // Find the versions we are targeting.
+            List<VersionManifest> manifests = VersionManifestTasks.allVersionsWithMappings(this, versionFilter, !snowShovelUpdated);
             LOGGER.info("Identified {} versions with manifests.", manifests.size());
             for (VersionManifest manifest : manifests) {
                 LOGGER.info("Processing version {}", manifest.id());
+                // Checkout or create a branch for this version.
+                // We then immediately delete all files except the .git folder, because we are lazy :)
                 GitTasks.checkoutOrCreateBranch(git, branchNameForVersion(manifest));
                 GitTasks.removeAllFiles(repoDir);
 
-                CompletableFuture<Path> clientJar = manifest.requireDownloadAsync(http, versionsDir, "client", "jar");
-                CompletableFuture<Path> clientMappings = manifest.requireDownloadAsync(http, versionsDir, "client_mappings", "mojmap");
-                CompletableFuture.allOf(clientJar, clientMappings).join();
+                // Download the client jar and client mappings proguard log.
+                var clientJarFuture = manifest.requireDownloadAsync(http, versionsDir, "client", "jar");
+                var clientMappingsFuture = manifest.requireDownloadAsync(http, versionsDir, "client_mappings", "mojmap");
+                CompletableFuture.allOf(clientJarFuture, clientMappingsFuture).join();
+                var clientJar = clientJarFuture.join();
+                var clientMappings = clientMappingsFuture.join();
 
-                Path remappedJar = clientJar.join().resolveSibling(FilenameUtils.getBaseName(clientJar.join().toString()) + "-remapped.jar");
-                RemapperTasks.runRemapper(http, jdkProvider, toolsDir, clientJar.join(), remappedJar, clientMappings.join());
+                // Remap the jar.
+                var remappedJar = clientJar.resolveSibling(FilenameUtils.getBaseName(clientJar.toString()) + "-remapped.jar");
+                RemapperTasks.runRemapper(this, clientJar, clientMappings, remappedJar);
 
+                // Compute and download all the libraries.
                 List<LibraryTasks.LibraryDownload> libraries = LibraryTasks.getVersionLibraries(manifest, librariesDir);
                 LibraryTasks.downloadLibraries(http, libraries);
 
-                JavaVersion javaVersion = manifest.javaVersion() != null ? JavaVersion.parse(manifest.javaVersion().majorVersion() + "") : null;
-                if (javaVersion == null) {
-                    javaVersion = JavaVersion.JAVA_1_8;
-                }
-
+                // Run the decompiler.
+                JavaVersion javaVersion = manifest.computeJavaVersion();
                 DecompileTasks.decompileAndTest(
-                        http,
-                        jdkProvider,
-                        toolsDir,
+                        this,
                         decompilerVersion != null ? decompilerVersion : "0.0.14", // TODO use latest, or version in metadata.
                         javaVersion,
                         FastStream.of(libraries)
@@ -177,20 +193,26 @@ public class SnowShovel {
                         remappedJar,
                         repoDir
                 );
+
+                // Load the stats for this version.
                 var stats = GenerateReportTask.loadTestStats(repoDir);
                 if (stats != null) {
                     testStats.put(manifest.id(), stats);
                 }
-                ProjectTasks.generateProjectFiles(librariesDir, http, repoDir, javaVersion, libraries, manifest.id(), stats);
+                // Generate Gradle project and misc files/reports, then commit the results.
+                ProjectTasks.generateProjectFiles(this, javaVersion, libraries, manifest.id(), stats);
                 GitTasks.stageAndCommit(git, "A commit!");
             }
 
+            // Switch back to the main branch, push the cache, regenerate our .gitignore/readme and commit.
             GitTasks.checkoutOrCreateBranch(git, "main");
             pushCache(data);
             emitMainGitignore();
             emitMainReadme(testStats.reversed());
 
             GitTasks.stageAndCommit(git, "A commit!");
+
+            // If enabled, push to git.
             if (shouldPush) {
                 GitTasks.pushAllBranches(git);
             }

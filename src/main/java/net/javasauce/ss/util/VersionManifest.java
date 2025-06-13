@@ -3,6 +3,7 @@ package net.javasauce.ss.util;
 import com.google.gson.*;
 import com.google.gson.annotations.JsonAdapter;
 import com.google.gson.reflect.TypeToken;
+import net.covers1624.jdkutils.JavaVersion;
 import net.covers1624.quack.collection.ColUtils;
 import net.covers1624.quack.collection.FastStream;
 import net.covers1624.quack.gson.JsonUtils;
@@ -32,7 +33,7 @@ public record VersionManifest(
         @Nullable String assets,
         @Nullable Map<String, Download> downloads,
         @Nullable String id,
-        @Nullable JavaVersion javaVersion,
+        @Nullable VersionManifest.McJavaVersion javaVersion,
         @Nullable List<Library> libraries,
         @Nullable Logging logging,
         @Nullable String mainClass,
@@ -96,6 +97,13 @@ public record VersionManifest(
         return requireNonNull(id);
     }
 
+    public JavaVersion computeJavaVersion() {
+        JavaVersion version = null;
+        if (javaVersion != null) version = JavaVersion.parse(javaVersion.majorVersion() + "");
+        if (version == null) version = JavaVersion.JAVA_1_8;
+        return version;
+    }
+
     @Override
     public String type() {
         return requireNonNull(type);
@@ -154,7 +162,7 @@ public record VersionManifest(
         }
     }
 
-    public record JavaVersion(
+    public record McJavaVersion(
             @Nullable String component,
             int majorVersion
     ) { }

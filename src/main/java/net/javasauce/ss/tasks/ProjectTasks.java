@@ -4,6 +4,7 @@ import net.covers1624.jdkutils.JavaVersion;
 import net.covers1624.quack.io.IOUtils;
 import net.covers1624.quack.io.IndentPrintWriter;
 import net.covers1624.quack.net.httpapi.HttpEngine;
+import net.javasauce.ss.SnowShovel;
 import net.javasauce.ss.tasks.LibraryTasks.LibraryDownload;
 import net.javasauce.ss.tasks.report.GenerateReportTask;
 import net.javasauce.ss.tasks.report.TestCaseDef;
@@ -29,20 +30,20 @@ public class ProjectTasks {
     private static final long GRADLE_WRAPPER_DIST_LEN = 44825;
     private static final String GRADLE_WRAPPER_DIST_HASH = "2e355d2ede2307bfe40330db29f52b9b729fd9b2";
 
-    public static void generateProjectFiles(Path librariesDir, HttpEngine http, Path projectDir, JavaVersion javaVersion, List<LibraryDownload> libraries, String mcVersion, @Nullable TestCaseDef testStats) throws IOException {
+    public static void generateProjectFiles(SnowShovel ss, JavaVersion javaVersion, List<LibraryDownload> libraries, String mcVersion, @Nullable TestCaseDef testStats) throws IOException {
         LOGGER.info("Configuring project..");
-        emitBuildGradle(projectDir, javaVersion, libraries);
-        emitSettingsGradle(projectDir);
-        emitGitIgnore(projectDir);
-        emitReadme(projectDir, mcVersion, testStats);
+        emitBuildGradle(ss.repoDir, javaVersion, libraries);
+        emitSettingsGradle(ss.repoDir);
+        emitGitIgnore(ss.repoDir);
+        emitReadme(ss.repoDir, mcVersion, testStats);
         var zip = DownloadTasks.downloadFile(
-                http,
+                ss.http,
                 GRADLE_WRAPPER_DIST,
-                librariesDir.resolve("GradleWrapper.zip"),
+                ss.librariesDir.resolve("GradleWrapper.zip"),
                 GRADLE_WRAPPER_DIST_LEN,
                 GRADLE_WRAPPER_DIST_HASH
         );
-        ZipTasks.extractZip(zip, projectDir);
+        ZipTasks.extractZip(zip, ss.repoDir);
     }
 
     private static void emitBuildGradle(Path projectDir, JavaVersion javaVersion, List<LibraryDownload> libraries) throws IOException {

@@ -32,7 +32,8 @@ public class LibraryTasks {
     }
 
     public static List<LibraryDownload> getVersionLibraries(VersionManifest manifest, Path librariesDir) {
-        return FastStream.of(manifest.libraries()).concat(ANNOTATIONS)
+        return FastStream.of(manifest.libraries())
+                .concat(ANNOTATIONS)
                 .map(e -> computeDownload(e, librariesDir))
                 .filter(Objects::nonNull)
                 .toList();
