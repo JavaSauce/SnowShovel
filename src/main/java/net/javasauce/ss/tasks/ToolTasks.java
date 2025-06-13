@@ -16,13 +16,17 @@ public class ToolTasks {
     private static final Logger LOGGER = LoggerFactory.getLogger(ToolTasks.class);
 
     public static Path extractTool(Path toolsDir, MavenNotation notation, Path toolZip) {
+        return extractTool(toolsDir, notation, toolZip, true);
+    }
+
+    public static Path extractTool(Path toolsDir, MavenNotation notation, Path toolZip, boolean cacheExtract) {
         try {
             LOGGER.info("Extracting tool {}", notation);
             Path extractedDir = toolsDir
                     .resolve(notation.toModulePath())
                     .resolve(notation.version)
                     .resolve(notation.module + "-" + notation.version);
-            if (Files.notExists(extractedDir)) {
+            if (Files.notExists(extractedDir) || !cacheExtract) {
                 ZipTasks.extractZip(toolZip, extractedDir);
                 LOGGER.info("Tool extracted.");
             } else {
