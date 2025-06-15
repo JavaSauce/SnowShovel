@@ -1,9 +1,14 @@
 package net.javasauce.ss.tasks;
 
+import net.covers1624.quack.collection.FastStream;
+import net.covers1624.quack.util.SneakyUtils;
 import org.eclipse.jgit.api.CreateBranchCommand;
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.ListBranchCommand;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.lib.Constants;
+import org.eclipse.jgit.lib.ObjectStream;
+import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.lib.TextProgressMonitor;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -15,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.List;
 
 /**
  * Created by covers1624 on 1/21/25.
@@ -41,6 +47,29 @@ public class GitTasks {
             return git;
         } catch (GitAPIException | IOException ex) {
             throw new RuntimeException("Failed to init git repo.", ex);
+        }
+    }
+
+    public static List<BranchEntry> listAllBranches(Git git) {
+        try {
+            return FastStream.of(git.branchList()
+                            .setListMode(ListBranchCommand.ListMode.ALL)
+                            .call())
+                    .filter(e -> e.getObjectId() != null)
+                    .map(e -> new BranchEntry(Repository.shortenRefName(e.getName()), e.getObjectId().getName()))
+                    .toList();
+        } catch (GitAPIException ex) {
+            throw new RuntimeException("Failed to list all branches.", ex);
+        }
+    }
+
+    public static void loadBlob(Git git, String object, SneakyUtils.ThrowingConsumer<ObjectStream, IOException> func) throws IOException {
+        var blobId = git.getRepository().resolve(object);
+        if (blobId == null) return;
+
+        var loader = git.getRepository().open(blobId);
+        try (var stream = loader.openStream()) {
+            func.accept(stream);
         }
     }
 
@@ -135,4 +164,6 @@ public class GitTasks {
             }
         });
     }
+
+    public record BranchEntry(String name, String commit) { }
 }

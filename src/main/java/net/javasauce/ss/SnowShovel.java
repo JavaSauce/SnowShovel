@@ -209,6 +209,20 @@ public class SnowShovel {
             data.putAll(pullCache());
             // TODO load TestCaseDef's from all branches as default values.
 
+            var branches = GitTasks.listAllBranches(git);
+            for (var entry : branches) {
+                String name = entry.name();
+                if (!name.startsWith("release/") && !name.startsWith("snapshot/")) continue;
+
+                String id = name.replace("release/", "").replace("snapshot/", "");
+                GitTasks.loadBlob(git, entry.commit()+ ":src/main/resources/test_stats.json", stream -> {
+                    testStats.put(
+                            id,
+                            JsonUtils.parse(GSON, stream, TestCaseDef.class, StandardCharsets.UTF_8)
+                    );
+                });
+            }
+
             boolean didWork = switch (mode) {
                 case AUTOMATIC -> tryRunAutomatic(git);
                 case SELF_CHANGES -> tryRunSelfChanges(git);
