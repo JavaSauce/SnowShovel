@@ -65,10 +65,6 @@ public class SnowShovel {
 
         OptionSpec<Void> helpOpt = parser.acceptsAll(of("h", "help"), "Prints this help").forHelp();
 
-        OptionSpec<String> versionOpt = parser.acceptsAll(of("v", "version"), "Filter the versions to process, limited to any specified by this flag.")
-                .withRequiredArg()
-                .withValuesSeparatedBy(",");
-
         var autoOpt = parser.accepts("mode-auto", "Set SnowShovel into Auto mode. Determines what to run each time its invoked. Fist, handling updates of itself. Then, minecraft updates. Finally, decompiler updates.");
         var selfChangesOpt = parser.accepts("mode-snowShovelChanged", "Set SnowShovel into Self-change mode. Minecraft updates will not be polled and the Decompiler will not be updated. All versions will be re-processed.");
         var mcChangesOpt = parser.accepts("mode-minecraftChanged", "Set SnowShovel into Minecraft-change mode. Minecraft versions will be polled again, and updates will be processed. The Decompiler will not be updated. Only changed versions will be processed.");
@@ -86,10 +82,16 @@ public class SnowShovel {
         mcChangesOpt.requiredUnless(autoOpt, selfChangesOpt, decompilerChangesOpt);
         decompilerChangesOpt.requiredUnless(autoOpt, selfChangesOpt, mcChangesOpt);
 
-        OptionSpec<String> gitRepoOpt = parser.accepts("gitRepo", "The remote git repository to use.")
+        // Dev flags.
+        OptionSpec<String> versionOpt = parser.accepts("only-version", "Dev only flag. Filter the versions to process, limited to any specified by this flag.")
+                .withRequiredArg()
+                .withValuesSeparatedBy(",");
+
+        OptionSpec<String> decompilerVersionOpt = parser.accepts("set-decompiler-version", "Dev only flag. Set the decompiler version to use.")
                 .withRequiredArg();
 
-        OptionSpec<String> decompilerVersionOpt = parser.accepts("decompiler-version", "Set the decompiler version to use. Otherwise use the latest available version on Maven.")
+        // Git flags.
+        OptionSpec<String> gitRepoOpt = parser.accepts("gitRepo", "The remote git repository to use.")
                 .withRequiredArg();
 
         OptionSpec<Void> gitPushOpt = parser.accepts("gitPush", "If SnowShovel should push to the repository.");
