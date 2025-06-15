@@ -5,6 +5,7 @@ import net.covers1624.quack.collection.FastStream;
 import net.covers1624.quack.gson.JsonUtils;
 import net.covers1624.quack.net.HttpEngineDownloadAction;
 import net.covers1624.quack.net.httpapi.HttpEngine;
+import net.javasauce.ss.tasks.DownloadTasks;
 import net.javasauce.ss.tasks.Tasks;
 import org.jetbrains.annotations.Nullable;
 
@@ -27,22 +28,20 @@ public record VersionListManifest(
 ) {
 
     private static final Gson GSON = new Gson();
-    private static final String URL = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+    public static final String URL = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+    public static final String FILE_NAME = "version_manifest_v2.json";
 
-    public static VersionListManifest update(HttpEngine http, Path versionsDir, boolean doUpdateIfExists) throws IOException {
-        Path file = versionsDir.resolve("version_manifest_v2.json");
+    public static void save(DownloadTasks.InMemoryDownload download, Path file) throws IOException {
+        download.writeTo(file);
+        JsonPretty.prettyPrintJsonFile(file);
+    }
 
-        if (Files.notExists(file) || doUpdateIfExists) {
-            Tasks.doWithRetry(10, () ->
-                    new HttpEngineDownloadAction(http)
-                            .setUrl(URL)
-                            .setDest(file)
-                            .setQuiet(false)
-                            .setUseETag(true)
-                            .execute()
-            );
+    public static VersionListManifest loadFrom(String str) {
+        try {
+            return JsonUtils.parse(GSON, str, VersionListManifest.class);
+        } catch (IOException ex) {
+            throw new RuntimeException("Failed to parse manifest.", ex);
         }
-        return JsonUtils.parse(GSON, file, VersionListManifest.class);
     }
 
     @Override

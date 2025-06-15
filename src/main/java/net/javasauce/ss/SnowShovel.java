@@ -17,10 +17,7 @@ import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.tasks.*;
 import net.javasauce.ss.tasks.report.GenerateReportTask;
 import net.javasauce.ss.tasks.report.TestCaseDef;
-import net.javasauce.ss.util.DeleteHierarchyVisitor;
-import net.javasauce.ss.util.JdkProvider;
-import net.javasauce.ss.util.ToolProvider;
-import net.javasauce.ss.util.VersionManifest;
+import net.javasauce.ss.util.*;
 import org.apache.commons.io.FilenameUtils;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.transport.CredentialsProvider;
@@ -39,6 +36,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BiFunction;
 
 import static java.util.List.of;
 
@@ -49,17 +47,46 @@ public class SnowShovel {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SnowShovel.class);
 
+    private static final String VERSION;
+
+    static {
+        String version = null;
+        var pkg = SnowShovel.class.getPackage();
+        if (pkg != null) {
+            version = pkg.getImplementationVersion();
+        }
+
+        VERSION = version != null ? version : "dev";
+    }
+
     public static void main(String[] args) throws IOException {
         OptionParser parser = new OptionParser();
         OptionSpec<String> nonOptions = parser.nonOptions();
 
         OptionSpec<Void> helpOpt = parser.acceptsAll(of("h", "help"), "Prints this help").forHelp();
 
-        OptionSpec<String> versionOpt = parser.acceptsAll(of("v", "version"), "Set the versions to process. Otherwise processes all.")
+        OptionSpec<String> versionOpt = parser.acceptsAll(of("v", "version"), "Filter the versions to process, limited to any specified by this flag.")
                 .withRequiredArg()
                 .withValuesSeparatedBy(",");
 
-        OptionSpec<String> gitRepoOpt = parser.acceptsAll(of("r", "repo"), "The git repository to use.")
+        var autoOpt = parser.accepts("mode-auto", "Set SnowShovel into Auto mode. Determines what to run each time its invoked. Fist, handling updates of itself. Then, minecraft updates. Finally, decompiler updates.");
+        var selfChangesOpt = parser.accepts("mode-snowShovelChanged", "Set SnowShovel into Self-change mode. Minecraft updates will not be polled and the Decompiler will not be updated. All versions will be re-processed.");
+        var mcChangesOpt = parser.accepts("mode-minecraftChanged", "Set SnowShovel into Minecraft-change mode. Minecraft versions will be polled again, and updates will be processed. The Decompiler will not be updated. Only changed versions will be processed.");
+        var decompilerChangesOpt = parser.accepts("mode-decompilerChanged", "Set SnowShovel into Decompiler-change mode. Minecraft updates will not be polled. The Decompiler will be updated. All versions will be re-processed.");
+
+        // All these options are incompatible with each other.
+        autoOpt.availableUnless(selfChangesOpt, mcChangesOpt, decompilerChangesOpt);
+        selfChangesOpt.availableUnless(autoOpt, mcChangesOpt, decompilerChangesOpt);
+        mcChangesOpt.availableUnless(autoOpt, selfChangesOpt, decompilerChangesOpt);
+        decompilerChangesOpt.availableUnless(autoOpt, selfChangesOpt, mcChangesOpt);
+
+        // One of them must be supplied.
+        autoOpt.requiredUnless(selfChangesOpt, mcChangesOpt, decompilerChangesOpt);
+        selfChangesOpt.requiredUnless(autoOpt, mcChangesOpt, decompilerChangesOpt);
+        mcChangesOpt.requiredUnless(autoOpt, selfChangesOpt, decompilerChangesOpt);
+        decompilerChangesOpt.requiredUnless(autoOpt, selfChangesOpt, mcChangesOpt);
+
+        OptionSpec<String> gitRepoOpt = parser.accepts("gitRepo", "The remote git repository to use.")
                 .withRequiredArg();
 
         OptionSpec<String> decompilerVersionOpt = parser.accepts("decompiler-version", "Set the decompiler version to use. Otherwise use the latest available version on Maven.")
@@ -67,10 +94,6 @@ public class SnowShovel {
 
         OptionSpec<Void> gitPushOpt = parser.accepts("gitPush", "If SnowShovel should push to the repository.");
         OptionSpec<Void> gitCleanOpt = parser.accepts("gitClean", "If SnowShovel should delete the previous checkout (if available) before doing stuff.");
-
-        OptionSpec<Boolean> snowShovelUpdatedOpt = parser.accepts("snowShovelUpdated", "If SnowShovel has been updated since last run. Disables updating versions and decompiler")
-                .withRequiredArg()
-                .ofType(Boolean.class);
 
         OptionSet optSet = parser.parse(args);
         if (optSet.has(helpOpt)) {
@@ -96,18 +119,36 @@ public class SnowShovel {
         }
         CredentialsProvider.setDefault(new UsernamePasswordCredentialsProvider(gitUser, gitPass));
 
+        Mode mode;
+        if (optSet.has(autoOpt)) {
+            mode = Mode.AUTOMATIC;
+        } else if (optSet.has(selfChangesOpt)) {
+            mode = Mode.SELF_CHANGES;
+        } else if (optSet.has(mcChangesOpt)) {
+            mode = Mode.MC_CHANGES;
+        } else if (optSet.has(decompilerChangesOpt)) {
+            mode = Mode.DECOMPILER_CHANGES;
+        } else {
+            throw new RuntimeException("No modes specified?");
+        }
+
         var ss = new SnowShovel(
                 Path.of(".").toAbsolutePath().normalize(),
                 optSet.has(gitPushOpt),
-                optSet.has(gitCleanOpt)
+                optSet.has(gitCleanOpt),
+                optSet.valueOf(decompilerVersionOpt),
+                optSet.valuesOf(versionOpt)
         );
-        ss.run(gitRepo, optSet.has(snowShovelUpdatedOpt), optSet.valuesOf(versionOpt), optSet.valueOf(decompilerVersionOpt));
+        ss.run(gitRepo, mode);
     }
 
     private static final Gson GSON = new GsonBuilder()
             .setPrettyPrinting()
             .create();
     private static final Type MAP_STRING_TYPE = new TypeToken<Map<String, String>>() { }.getType();
+
+    private static final String TAG_SNOW_SHOVEL_VERSION = "SnowShovelVersion";
+    private static final String TAG_DECOMPILER_VERSION = "DecompilerVersion";
 
     public final Path workDir;
     public final boolean shouldPush;
@@ -126,10 +167,20 @@ public class SnowShovel {
     public final ToolProvider fastRemapper;
     public final ToolProvider decompiler;
 
-    public SnowShovel(Path workDir, boolean shouldPush, boolean shouldClean) {
+    public final @Nullable String decompilerOverride;
+    public final List<String> mcVersionsOverride;
+
+    private final Map<String, String> data = new HashMap<>();
+    private final LinkedHashMap<String, TestCaseDef> testStats = new LinkedHashMap<>();
+
+    private @Nullable String mainCommitTitle;
+
+    public SnowShovel(Path workDir, boolean shouldPush, boolean shouldClean, @Nullable String decompilerOverride, List<String> mcVersionsOverride) {
         this.workDir = workDir;
         this.shouldPush = shouldPush;
         this.shouldClean = shouldClean;
+        this.decompilerOverride = decompilerOverride;
+        this.mcVersionsOverride = mcVersionsOverride;
 
         versionsDir = workDir.resolve("versions");
         librariesDir = workDir.resolve("libraries");
@@ -145,7 +196,7 @@ public class SnowShovel {
                 .enableExtraction();
     }
 
-    private void run(String gitRepo, boolean snowShovelUpdated, List<String> versionFilter, @Nullable String decompilerVersion) throws IOException {
+    private void run(String gitRepo, Mode mode) throws IOException {
         // Nuke the repo if we are told to start from scratch.
         if (shouldClean && Files.exists(repoDir)) {
             Files.walkFileTree(repoDir, new DeleteHierarchyVisitor());
@@ -153,88 +204,179 @@ public class SnowShovel {
         // Initialize the git repo, this will either clone, set up a local repo, or switch to the Main branch ready to work.
         try (Git git = GitTasks.setup(repoDir, gitRepo)) {
             // Pull the versions cache and properties from the main branch.
-            Map<String, String> data = pullCache();
+            data.putAll(pullCache());
+            // TODO load TestCaseDef's from all branches as default values.
 
-            // TODO load these initially from the cached existing file on each branch.
-            //      We will need this for partial updates, so the main branch stats stay consistent.
-            LinkedHashMap<String, TestCaseDef> testStats = new LinkedHashMap<>();
+            boolean didWork = switch (mode) {
+                case AUTOMATIC -> tryRunAutomatic(git);
+                case SELF_CHANGES -> tryRunSelfChanges(git);
+                case MC_CHANGES -> tryRunMinecraftChanges(git);
+                case DECOMPILER_CHANGES -> tryRunDecompilerChanges(git);
+            };
 
-            // TODO in automatic mode we need to figure out what has changed. It will either be:
-            //      - a new Minecraft Version
-            //      - a Minecraft Version change
-            //      - a SnowShovel update (FastRemapper or other change)
-            //      - a Decompiler update
+            if (didWork) {
+                // Switch back to the main branch, push the cache, regenerate our .gitignore/readme and commit.
+                GitTasks.checkoutOrCreateBranch(git, "main");
+                pushCache(data);
+                emitMainGitignore();
+                emitMainReadme(testStats.reversed());
 
-            // Find the versions we are targeting.
-            List<VersionManifest> manifests = VersionManifestTasks.allVersionsWithMappings(this, versionFilter, !snowShovelUpdated);
-            LOGGER.info("Identified {} versions with manifests.", manifests.size());
-
-            // Trigger a resolve of FastRemapper and the decompiler. No real reason for doing it here specifically, other than to keep the logs clean.
-            // Things should lock here pretty well whilst they complete async.
-            fastRemapper.resolveWithVersion("0.3.2.18");
-            decompiler.resolveWithVersion(decompilerVersion != null ? decompilerVersion : "0.0.14");
-
-            for (VersionManifest manifest : manifests) {
-                LOGGER.info("Processing version {}", manifest.id());
-                // Checkout or create a branch for this version.
-                // We then immediately delete all files except the .git folder, because we are lazy :)
-                GitTasks.checkoutOrCreateBranch(git, branchNameForVersion(manifest));
-                GitTasks.removeAllFiles(repoDir);
-
-                // Download the client jar and client mappings proguard log.
-                var clientJarFuture = manifest.requireDownloadAsync(http, versionsDir, "client", "jar");
-                var clientMappingsFuture = manifest.requireDownloadAsync(http, versionsDir, "client_mappings", "mojmap");
-                CompletableFuture.allOf(clientJarFuture, clientMappingsFuture).join();
-                var clientJar = clientJarFuture.join();
-                var clientMappings = clientMappingsFuture.join();
-
-                // Remap the jar.
-                var remappedJar = clientJar.resolveSibling(FilenameUtils.getBaseName(clientJar.toString()) + "-remapped.jar");
-                RemapperTasks.runRemapper(this, clientJar, clientMappings, remappedJar);
-
-                // Compute and download all the libraries.
-                List<LibraryTasks.LibraryDownload> libraries = LibraryTasks.getVersionLibraries(manifest, librariesDir);
-                LibraryTasks.downloadLibraries(http, libraries);
-
-                // Run the decompiler.
-                JavaVersion javaVersion = manifest.computeJavaVersion();
-                DecompileTasks.decompileAndTest(
-                        this,
-                        javaVersion,
-                        FastStream.of(libraries)
-                                .map(LibraryTasks.LibraryDownload::path)
-                                .toList(),
-                        remappedJar,
-                        repoDir
-                );
-
-                // Load the stats for this version.
-                var stats = GenerateReportTask.loadTestStats(repoDir);
-                if (stats != null) {
-                    testStats.put(manifest.id(), stats);
+                if (mainCommitTitle == null) {
+                    throw new RuntimeException("No commit title was collected.");
                 }
-                // Generate Gradle project and misc files/reports, then commit the results.
-                ProjectTasks.generateProjectFiles(this, javaVersion, libraries, manifest.id(), stats);
-                GitTasks.stageAndCommit(git, "A commit!");
-            }
+                GitTasks.stageAndCommit(git, mainCommitTitle);
 
-            // Switch back to the main branch, push the cache, regenerate our .gitignore/readme and commit.
-            GitTasks.checkoutOrCreateBranch(git, "main");
-            pushCache(data);
-            emitMainGitignore();
-            emitMainReadme(testStats.reversed());
-
-            GitTasks.stageAndCommit(git, "A commit!");
-
-            // If enabled, push to git.
-            if (shouldPush) {
-                GitTasks.pushAllBranches(git);
+                // If enabled, push to git.
+                if (shouldPush) {
+                    GitTasks.pushAllBranches(git);
+                }
+            } else {
+                LOGGER.info("Nothing to do.");
             }
         }
         LOGGER.info("Done!");
     }
 
+    private boolean tryRunAutomatic(Git git) throws IOException {
+        LOGGER.info("Running in Automatic mode.");
+        mainCommitTitle = "Automatic run: ";
+        if (tryRunSelfChanges(git)) return true;
+        if (tryRunMinecraftChanges(git)) return true;
+        if (tryRunDecompilerChanges(git)) return true;
+
+        return false;
+    }
+
+    private boolean tryRunSelfChanges(Git git) throws IOException {
+        LOGGER.info("Checking for changes to SnowShovel version since last run..");
+        var prev = data.get(TAG_SNOW_SHOVEL_VERSION);
+        if (VERSION.equals(prev)) return false;
+
+        String commitTitle = "SnowShovel updated from " + prev + " to " + VERSION;
+        mainCommitTitle += " " + commitTitle;
+
+        LOGGER.info(commitTitle);
+        processAllVersions(git, data.get(TAG_DECOMPILER_VERSION), (_, _) -> commitTitle);
+        return true;
+    }
+
+    private boolean tryRunMinecraftChanges(Git git) throws IOException {
+        LOGGER.info("Checking for changes to Minecraft versions since last run..");
+        var changedVersions = VersionManifestTasks.changedVersions(this);
+        if (changedVersions == null) return false;
+        LOGGER.info(" The following versions changed: {}", FastStream.of(changedVersions).map(VersionListManifest.Version::id).toList());
+
+        mainCommitTitle += " New Minecraft versions or changes.";
+
+        processVersions(
+                git,
+                VersionManifestTasks.getManifests(this, changedVersions),
+                data.get(TAG_DECOMPILER_VERSION),
+                (n, e) -> {
+                    if (n) {
+                        return "New version " + e.id();
+                    }
+                    return "Version manifest changed.";
+                }
+        );
+        return true;
+    }
+
+    private boolean tryRunDecompilerChanges(Git git) throws IOException {
+        LOGGER.info("Checking for changes to Decompiler version since last run..");
+        var prev = data.get(TAG_DECOMPILER_VERSION);
+        String latestDecompiler = decompiler.findLatest();
+        if (latestDecompiler.equals(prev)) return false;
+        LOGGER.info(" Decompiler version changed from {} to {}", prev, latestDecompiler);
+
+        String commitTitle = "Decompiler updated from " + prev + " to " + VERSION;
+        mainCommitTitle += " " + commitTitle;
+
+        processAllVersions(git, latestDecompiler, (_, _) -> commitTitle);
+        return true;
+    }
+
+    private void processAllVersions(Git git, @Nullable String decompilerVersion, BiFunction<Boolean, VersionManifest, String> commitNameFunc) throws IOException {
+        processVersions(
+                git,
+                VersionManifestTasks.getManifests(this, VersionManifestTasks.allVersions(this)),
+                decompilerVersion,
+                commitNameFunc
+        );
+    }
+
+    private void processVersions(Git git, List<VersionManifest> manifests, @Nullable String decompilerVersion, BiFunction<Boolean, VersionManifest, String> commitNameFunc) throws IOException {
+        // If we are overridden use that.
+        if (decompilerOverride != null) decompilerVersion = decompilerOverride;
+
+        if (decompilerVersion == null) {
+            decompilerVersion = decompiler.findLatest();
+        }
+        fastRemapper.resolveWithVersion("0.3.2.18");
+        decompiler.resolveWithVersion(decompilerVersion);
+        var manifestsToProcess = filterTargets(manifests);
+        LOGGER.info("Found {} versions to process.", manifestsToProcess.size());
+        int i = 0;
+        for (VersionManifest manifest : manifestsToProcess) {
+            LOGGER.info("Processing version {} {}/{}", manifest.id(), ++i, manifestsToProcess.size());
+            // Checkout or create a branch for this version.
+            // We then immediately delete all files except the .git folder, because we are lazy :)
+            boolean newBranch = GitTasks.checkoutOrCreateBranch(git, branchNameForVersion(manifest));
+            GitTasks.removeAllFiles(repoDir);
+
+            // Download the client jar and client mappings proguard log.
+            var clientJarFuture = manifest.requireDownloadAsync(http, versionsDir, "client", "jar");
+            var clientMappingsFuture = manifest.requireDownloadAsync(http, versionsDir, "client_mappings", "mojmap");
+            CompletableFuture.allOf(clientJarFuture, clientMappingsFuture).join();
+            var clientJar = clientJarFuture.join();
+            var clientMappings = clientMappingsFuture.join();
+
+            // Remap the jar.
+            var remappedJar = clientJar.resolveSibling(FilenameUtils.getBaseName(clientJar.toString()) + "-remapped.jar");
+            RemapperTasks.runRemapper(this, clientJar, clientMappings, remappedJar);
+
+            // Compute and download all the libraries.
+            List<LibraryTasks.LibraryDownload> libraries = LibraryTasks.getVersionLibraries(manifest, librariesDir);
+            LibraryTasks.downloadLibraries(http, libraries);
+
+            // Run the decompiler.
+            JavaVersion javaVersion = manifest.computeJavaVersion();
+            DecompileTasks.decompileAndTest(
+                    this,
+                    javaVersion,
+                    FastStream.of(libraries)
+                            .map(LibraryTasks.LibraryDownload::path)
+                            .toList(),
+                    remappedJar,
+                    repoDir
+            );
+
+            // Load the stats for this version.
+            var stats = GenerateReportTask.loadTestStats(repoDir);
+            if (stats != null) {
+                testStats.put(manifest.id(), stats);
+            }
+            // Generate Gradle project and misc files/reports, then commit the results.
+            ProjectTasks.generateProjectFiles(this, javaVersion, libraries, manifest.id(), stats);
+            GitTasks.stageAndCommit(git, commitNameFunc.apply(newBranch, manifest));
+        }
+
+        data.put(TAG_SNOW_SHOVEL_VERSION, VERSION);
+        data.put(TAG_DECOMPILER_VERSION, decompilerVersion);
+    }
+
+    private List<VersionManifest> filterTargets(List<VersionManifest> manifests) {
+        if (mcVersionsOverride.isEmpty()) return manifests;
+
+        return FastStream.of(manifests)
+                .filter(e -> mcVersionsOverride.contains(e.id()))
+                .toList();
+    }
+
     private Map<String, String> pullCache() throws IOException {
+        if (Files.exists(cacheDir)) {
+            Files.walkFileTree(cacheDir, new DeleteHierarchyVisitor());
+        }
         var repoCacheDir = repoDir.resolve("cache");
         if (Files.exists(repoCacheDir)) {
             Files.walkFileTree(repoCacheDir, new CopyingFileVisitor(repoCacheDir, cacheDir));
@@ -251,7 +393,7 @@ public class SnowShovel {
     }
 
     private void pushCache(Map<String, String> data) throws IOException {
-        var dataJson = cacheDir.resolve("versions.properties");
+        var dataJson = cacheDir.resolve("versions.json");
         JsonUtils.write(GSON, dataJson, data, MAP_STRING_TYPE, StandardCharsets.UTF_8);
 
         var repoCacheDir = repoDir.resolve("cache");
@@ -289,5 +431,12 @@ public class SnowShovel {
 
     private static String branchNameForVersion(VersionManifest manifest) {
         return manifest.type() + "/" + manifest.id();
+    }
+
+    private enum Mode {
+        AUTOMATIC,
+        SELF_CHANGES,
+        MC_CHANGES,
+        DECOMPILER_CHANGES
     }
 }

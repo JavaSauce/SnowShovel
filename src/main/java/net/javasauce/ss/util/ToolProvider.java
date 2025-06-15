@@ -5,7 +5,17 @@ import net.javasauce.ss.SnowShovel;
 import net.javasauce.ss.tasks.DownloadTasks;
 import net.javasauce.ss.tasks.ToolTasks;
 import org.jetbrains.annotations.Nullable;
+import org.w3c.dom.Document;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
 
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 
@@ -13,6 +23,8 @@ import java.util.concurrent.CompletableFuture;
  * Created by covers1624 on 6/14/25.
  */
 public final class ToolProvider {
+
+    private static final String MAVEN = "https://maven.covers1624.net/";
 
     private final SnowShovel ss;
     private final MavenNotation baseNotation;
@@ -37,7 +49,7 @@ public final class ToolProvider {
         if (toolFuture != null) throw new IllegalStateException("Already resolved.");
 
         notation = baseNotation.withVersion(version);
-        toolFuture = DownloadTasks.downloadMavenArtifactAsync(ss.http, "https://maven.covers1624.net", notation, ss.toolsDir);
+        toolFuture = DownloadTasks.downloadMavenArtifactAsync(ss.http, MAVEN, notation, ss.toolsDir);
         if (requiresExtracting) {
             toolFuture = toolFuture.thenApplyAsync(e -> ToolTasks.extractTool(ss.toolsDir, notation, e, !version.contains("SNAPSHOT")));
         }
@@ -53,6 +65,24 @@ public final class ToolProvider {
         if (toolFuture == null) throw new IllegalStateException("Not resolved yet.");
 
         return toolFuture.join();
+    }
+
+    public String findLatest() throws IOException {
+        var download = DownloadTasks.inMemoryDownload(ss.http, MAVEN + baseNotation.toModulePath() + "maven-metadata.xml", null);
+
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            DocumentBuilder builder = factory.newDocumentBuilder();
+
+            Document doc = builder.parse(new InputSource(new StringReader(download.toString())));
+            doc.getDocumentElement().normalize();
+
+            return doc.getElementsByTagName("latest")
+                    .item(0)
+                    .getTextContent();
+        } catch (ParserConfigurationException | SAXException ex) {
+            throw new IOException("Failed to parse xml.", ex);
+        }
     }
 
 }

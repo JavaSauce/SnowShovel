@@ -44,16 +44,18 @@ public class GitTasks {
         }
     }
 
-    public static void checkoutOrCreateBranch(Git git, String branch) {
+    public static boolean checkoutOrCreateBranch(Git git, String branch) {
         try {
-            if (git.getRepository().getBranch().equals(branch)) return;
+            if (git.getRepository().getBranch().equals(branch)) return false;
 
             if (git.getRepository().findRef(Constants.R_HEADS + branch) != null) {
                 LOGGER.info("Checking out existing branch {}", branch);
                 git.checkout()
                         .setName(branch)
                         .call();
-            } else if (git.getRepository().findRef(Constants.R_REMOTES + "origin/" + branch) != null) {
+                return false;
+            }
+            if (git.getRepository().findRef(Constants.R_REMOTES + "origin/" + branch) != null) {
                 LOGGER.info("Checking out existing remote branch {}", branch);
                 git.checkout()
                         .setName(branch)
@@ -61,13 +63,14 @@ public class GitTasks {
                         .setStartPoint("origin/" + branch)
                         .setUpstreamMode(CreateBranchCommand.SetupUpstreamMode.TRACK)
                         .call();
-            } else {
-                LOGGER.info("Creating new branch {}", branch);
-                git.checkout()
-                        .setName(branch)
-                        .setOrphan(true)
-                        .call();
+                return false;
             }
+            LOGGER.info("Creating new branch {}", branch);
+            git.checkout()
+                    .setName(branch)
+                    .setOrphan(true)
+                    .call();
+            return true;
         } catch (IOException | GitAPIException ex) {
             throw new RuntimeException("Failed to checkout branch " + branch, ex);
         }

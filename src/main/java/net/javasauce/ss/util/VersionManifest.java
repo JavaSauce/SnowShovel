@@ -16,7 +16,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.lang.reflect.Type;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -50,22 +49,20 @@ public record VersionManifest(
             .registerTypeAdapter(MavenNotation.class, new MavenNotationAdapter())
             .create();
 
-    public static CompletableFuture<VersionManifest> updateFuture(HttpEngine http, Path versionsDir, VersionListManifest.Version version, boolean doUpdateIfExists) {
+    public static CompletableFuture<VersionManifest> updateFuture(HttpEngine http, Path versionsDir, VersionListManifest.Version version) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                return update(http, versionsDir, version, doUpdateIfExists);
+                return update(http, versionsDir, version);
             } catch (IOException ex) {
                 throw new RuntimeException("Failed to update version.", ex);
             }
         });
     }
 
-    public static VersionManifest update(HttpEngine http, Path versionsDir, VersionListManifest.Version version, boolean doUpdateIfExists) throws IOException {
+    public static VersionManifest update(HttpEngine http, Path versionsDir, VersionListManifest.Version version) throws IOException {
         Path file = versionsDir.resolve(version.id() + "/" + version.id() + ".json");
-
-        if (Files.notExists(file) || doUpdateIfExists) {
-            DownloadTasks.downloadFile(http, version.url(), file, -1, version.sha1());
-        }
+        DownloadTasks.downloadFile(http, version.url(), file, -1, version.sha1());
+        JsonPretty.prettyPrintJsonFile(file); // I don't like doing this always, but very meh.
         return JsonUtils.parse(GSON, file, VersionManifest.class);
     }
 
