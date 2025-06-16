@@ -136,7 +136,7 @@ public class ProjectTasks {
                 Output of SnowShovel
                 """;
         if (testStats != null) {
-            readme += GenerateReportTask.generateReport(Map.of(mcVersion, testStats));
+            readme += GenerateReportTask.generateReport(List.of(new GenerateReportTask.ReportPair(mcVersion, testStats)));
         }
 
         Files.writeString(projectDir.resolve("README.md"), readme);

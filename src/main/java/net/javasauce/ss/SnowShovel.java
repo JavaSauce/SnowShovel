@@ -15,6 +15,7 @@ import net.covers1624.quack.io.CopyingFileVisitor;
 import net.covers1624.quack.maven.MavenNotation;
 import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.tasks.*;
+import net.javasauce.ss.tasks.report.DiscordReportTask;
 import net.javasauce.ss.tasks.report.GenerateReportTask;
 import net.javasauce.ss.tasks.report.TestCaseDef;
 import net.javasauce.ss.util.*;
@@ -32,7 +33,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -173,7 +173,8 @@ public class SnowShovel {
     public final List<String> mcVersionsOverride;
 
     private final Map<String, String> data = new HashMap<>();
-    private final LinkedHashMap<String, TestCaseDef> testStats = new LinkedHashMap<>();
+    private final Map<String, TestCaseDef> preTestStats = new HashMap<>();
+    private final Map<String, TestCaseDef> testStats = new HashMap<>();
 
     private @Nullable String mainCommitTitle;
 
@@ -215,13 +216,14 @@ public class SnowShovel {
                 if (!name.startsWith("release/") && !name.startsWith("snapshot/")) continue;
 
                 String id = name.replace("release/", "").replace("snapshot/", "");
-                GitTasks.loadBlob(git, entry.commit()+ ":src/main/resources/test_stats.json", stream -> {
-                    testStats.put(
+                GitTasks.loadBlob(git, entry.commit() + ":src/main/resources/test_stats.json", stream -> {
+                    preTestStats.put(
                             id,
-                            JsonUtils.parse(GSON, stream, TestCaseDef.class, StandardCharsets.UTF_8)
+                            TestCaseDef.loadTestStats(stream)
                     );
                 });
             }
+            testStats.putAll(preTestStats);
 
             boolean didWork = switch (mode) {
                 case AUTOMATIC -> tryRunAutomatic(git);
@@ -235,7 +237,7 @@ public class SnowShovel {
                 GitTasks.checkoutOrCreateBranch(git, "main");
                 pushCache(data);
                 emitMainGitignore();
-                emitMainReadme(testStats.reversed());
+                emitMainReadme();
 
                 if (mainCommitTitle == null) {
                     throw new RuntimeException("No commit title was collected.");
@@ -246,6 +248,11 @@ public class SnowShovel {
                 if (shouldPush) {
                     GitTasks.pushAllBranches(git);
                 }
+
+                String webhook = System.getenv("DISCORD_WEBHOOK");
+                if (webhook != null) {
+                    DiscordReportTask.generateReports(http, webhook, preTestStats, testStats);
+                }
             } else {
                 LOGGER.info("Nothing to do.");
             }
@@ -253,6 +260,7 @@ public class SnowShovel {
         LOGGER.info("Done!");
     }
 
+    @SuppressWarnings ("RedundantIfStatement")
     private boolean tryRunAutomatic(Git git) throws IOException {
         LOGGER.info("Running in Automatic mode.");
         mainCommitTitle = "Automatic run: ";
@@ -368,8 +376,10 @@ public class SnowShovel {
             );
 
             // Load the stats for this version.
-            var stats = GenerateReportTask.loadTestStats(repoDir);
-            if (stats != null) {
+            TestCaseDef stats = null;
+            Path statsFile = repoDir.resolve("src/main/resources/test_stats.json");
+            if (Files.exists(statsFile)) {
+                stats = TestCaseDef.loadTestStats(statsFile);
                 testStats.put(manifest.id(), stats);
             }
             // Generate Gradle project and misc files/reports, then commit the results.
@@ -435,12 +445,17 @@ public class SnowShovel {
         );
     }
 
-    private void emitMainReadme(Map<String, TestCaseDef> testStats) throws IOException {
+    private void emitMainReadme() throws IOException {
         String readme = """
                 # Shoveled
                 Output of SnowShovel
                 """;
-        readme += GenerateReportTask.generateReport(testStats);
+        readme += GenerateReportTask.generateReport(
+                FastStream.of(VersionManifestTasks.allVersions(this).reversed())
+                        .filter(e -> testStats.containsKey(e.id()))
+                        .map(e -> new GenerateReportTask.ReportPair(e.id(), testStats.get(e.id())))
+                        .toList()
+        );
 
         Files.writeString(repoDir.resolve("README.md"), readme);
     }
