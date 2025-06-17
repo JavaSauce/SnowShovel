@@ -9,6 +9,7 @@ import org.jetbrains.annotations.Nullable;
 import java.awt.*;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -61,6 +62,11 @@ public class DiscordWebhook {
 
     public DiscordWebhook addEmbed(Embed embed) {
         embeds.add(embed);
+        return this;
+    }
+
+    public DiscordWebhook addEmbeds(Collection<Embed> embeds) {
+        this.embeds.addAll(embeds);
         return this;
     }
 

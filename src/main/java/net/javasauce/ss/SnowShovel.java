@@ -251,7 +251,7 @@ public class SnowShovel {
 
                 String webhook = System.getenv("DISCORD_WEBHOOK");
                 if (webhook != null) {
-                    DiscordReportTask.generateReports(http, webhook, preTestStats, testStats);
+                    DiscordReportTask.generateReports(this, webhook, preTestStats, testStats);
                 }
             } else {
                 LOGGER.info("Nothing to do.");

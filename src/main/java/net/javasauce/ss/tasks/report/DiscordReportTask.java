@@ -1,12 +1,15 @@
 package net.javasauce.ss.tasks.report;
 
 import net.covers1624.quack.collection.FastStream;
-import net.covers1624.quack.net.httpapi.HttpEngine;
-import net.javasauce.ss.tasks.report.GenerateReportTask.ReportPair;
+import net.javasauce.ss.SnowShovel;
+import net.javasauce.ss.tasks.VersionManifestTasks;
 import net.javasauce.ss.util.DiscordWebhook;
+import net.javasauce.ss.util.VersionListManifest;
+import org.jetbrains.annotations.NotNull;
 
 import java.awt.*;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -18,49 +21,61 @@ public class DiscordReportTask {
     private static final String GS = "\uD83D\uDFE9";
     private static final String RS = "\uD83D\uDFE5";
 
-    public static void generateReports(HttpEngine http, String webhook, Map<String, TestCaseDef> preTestStats, Map<String, TestCaseDef> postTestStats) throws IOException {
-        reportNewVersions(http, webhook, FastStream.of(postTestStats.entrySet())
-                .filterNot(e -> preTestStats.containsKey(e.getKey()))
-                .map(e -> new ReportPair(e.getKey(), e.getValue()))
-                .toList()
-        );
-
-        var changedVersionEmbeds = FastStream.of(postTestStats.entrySet())
-                .filter(e -> preTestStats.containsKey(e.getKey()))
-                .map(e -> new ComparisonPair(e.getKey(), preTestStats.get(e.getKey()), e.getValue()))
-                .map(DiscordReportTask::buildComparisonEmbed)
+    public static void generateReports(SnowShovel ss, String webhook, Map<String, TestCaseDef> preTestStats, Map<String, TestCaseDef> postTestStats) throws IOException {
+        var order = FastStream.of(VersionManifestTasks.allVersions(ss))
+                .map(VersionListManifest.Version::id)
                 .toList();
 
-        for (var embed : changedVersionEmbeds) {
-            // TODO obey discord rate limits.
-            new DiscordWebhook(webhook)
-                    .addEmbed(embed)
-                    .execute(http);
-        }
-    }
+        List<List<DiscordWebhook.Embed>> embeds = new ArrayList<>();
+        List<DiscordWebhook.Embed> building = new ArrayList<>();
+        for (String id : order.reversed()) {
+            TestCaseDef pre = preTestStats.get(id);
+            TestCaseDef post = postTestStats.get(id);
 
-    private static void reportNewVersions(HttpEngine http, String webhook, List<ReportPair> newVersions) throws IOException {
-        for (ReportPair newVersion : newVersions) {
-            var stats = GenerateReportTask.buildStats(newVersion.def());
-            var embed = new DiscordWebhook.Embed()
-                    .setTitle(newVersion.mcVersion())
-                    .setColor(new Color(0x4CAF50));
-            for (TestCaseState state : TestCaseState.VALUES.reversed()) {
-                embed.addField(state.humanName, String.valueOf(stats.numCases()[state.ordinal()]), state != TestCaseState.BROKEN);
+            if (post == null) continue; // We don't currently care about removals.
+
+            if (pre == null) {
+                building.add(buildNewEmbed(id, post));
+            } else {
+                building.add(buildComparisonEmbed(id, pre, post));
             }
+            if (building.size() == 10) {
+                embeds.add(List.copyOf(building));
+                building.clear();
+            }
+        }
+        if (!building.isEmpty()) {
+            embeds.add(List.copyOf(building));
+        }
 
+        for (var values : embeds) {
             new DiscordWebhook(webhook)
-                    .setContent("New Minecraft version!")
-                    .addEmbed(embed)
-                    .execute(http);
+                    .addEmbeds(values)
+                    .execute(ss.http);
+            // TODO obey discord rate limits, for now, just honk shoe for a bit.
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException ignored) {
+            }
         }
     }
 
-    private static DiscordWebhook.Embed buildComparisonEmbed(ComparisonPair version) {
-        var comp = GenerateReportTask.compareCases(version.left, version.right);
+    private static DiscordWebhook.@NotNull Embed buildNewEmbed(String mcVersion, TestCaseDef def) {
+        var stats = GenerateReportTask.buildStats(def);
+        var embed = new DiscordWebhook.Embed()
+                .setTitle("New version: " + mcVersion)
+                .setColor(new Color(0x4CAF50));
+        for (TestCaseState state : TestCaseState.VALUES.reversed()) {
+            embed.addField(state.humanName, String.valueOf(stats.numCases()[state.ordinal()]), false);
+        }
+        return embed;
+    }
+
+    private static DiscordWebhook.Embed buildComparisonEmbed(String mcVersion, TestCaseDef left, TestCaseDef right) {
+        var comp = GenerateReportTask.compareCases(left, right);
 
         var embed = new DiscordWebhook.Embed()
-                .setTitle("Version changed: " + version.mcVersion())
+                .setTitle("Version changed: " + mcVersion)
                 .setColor(new Color(0xFF9800));
         for (TestCaseState state : TestCaseState.VALUES.reversed()) {
             int i = state.ordinal();
@@ -80,6 +95,4 @@ public class DiscordReportTask {
         }
         return embed;
     }
-
-    private record ComparisonPair(String mcVersion, TestCaseDef left, TestCaseDef right) { }
 }
