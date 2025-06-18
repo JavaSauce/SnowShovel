@@ -1,0 +1,24 @@
+name: Run SnowShovel
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+
+jobs:
+  run:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: 'temurin'
+      - name: Run
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          GIT_USER: JavaSauce
+          GIT_PASS: ${{ secrets.GIT_PASS }}
+        run: .github/scripts/run.sh --mode-auto --gitRepo https://github.com/JavaSauce/Shoveled --gitClean --gitPush
