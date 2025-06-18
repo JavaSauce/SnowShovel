@@ -284,7 +284,7 @@ public class SnowShovel {
         mainCommitTitle += " " + commitTitle;
 
         LOGGER.info(commitTitle);
-        return processAllVersions(git, data.get(TAG_DECOMPILER_VERSION), (_, _) -> commitTitle);
+        return processAllVersions(git, data.get(TAG_DECOMPILER_VERSION), (n, e) -> commitTitle);
     }
 
     private boolean tryRunMinecraftChanges(Git git) throws IOException {
@@ -325,7 +325,7 @@ public class SnowShovel {
         String commitTitle = "Decompiler updated from " + prev + " to " + latestDecompiler;
         mainCommitTitle += " " + commitTitle;
 
-        return processAllVersions(git, latestDecompiler, (_, _) -> commitTitle);
+        return processAllVersions(git, latestDecompiler, (n, e) -> commitTitle);
     }
 
     private boolean processAllVersions(Git git, @Nullable String decompilerVersion, BiFunction<Boolean, VersionManifest, String> commitNameFunc) throws IOException {
