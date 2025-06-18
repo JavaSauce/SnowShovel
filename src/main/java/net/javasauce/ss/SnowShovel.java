@@ -135,13 +135,14 @@ public class SnowShovel {
         }
 
         var ss = new SnowShovel(
+                gitRepo,
                 Path.of(".").toAbsolutePath().normalize(),
                 optSet.has(gitPushOpt),
                 optSet.has(gitCleanOpt),
                 optSet.valueOf(decompilerVersionOpt),
                 optSet.valuesOf(versionOpt)
         );
-        ss.run(gitRepo, mode);
+        ss.run(mode);
     }
 
     private static final Gson GSON = new GsonBuilder()
@@ -152,6 +153,7 @@ public class SnowShovel {
     private static final String TAG_SNOW_SHOVEL_VERSION = "SnowShovelVersion";
     private static final String TAG_DECOMPILER_VERSION = "DecompilerVersion";
 
+    public final String gitRepo;
     public final Path workDir;
     public final boolean shouldPush;
     public final boolean shouldClean;
@@ -173,12 +175,14 @@ public class SnowShovel {
     public final List<String> mcVersionsOverride;
 
     private final Map<String, String> data = new HashMap<>();
-    private final Map<String, TestCaseDef> preTestStats = new HashMap<>();
-    private final Map<String, TestCaseDef> testStats = new HashMap<>();
+    private final Map<String, CommittedTestCaseDef> preTestStats = new HashMap<>();
+    private final Map<String, CommittedTestCaseDef> testStats = new HashMap<>();
+    private final Map<String, String> commitTitles = new HashMap<>();
 
     private @Nullable String mainCommitTitle;
 
-    public SnowShovel(Path workDir, boolean shouldPush, boolean shouldClean, @Nullable String decompilerOverride, List<String> mcVersionsOverride) {
+    public SnowShovel(String gitRepo, Path workDir, boolean shouldPush, boolean shouldClean, @Nullable String decompilerOverride, List<String> mcVersionsOverride) {
+        this.gitRepo = gitRepo;
         this.workDir = workDir;
         this.shouldPush = shouldPush;
         this.shouldClean = shouldClean;
@@ -199,7 +203,7 @@ public class SnowShovel {
                 .enableExtraction();
     }
 
-    private void run(String gitRepo, Mode mode) throws IOException {
+    private void run(Mode mode) throws IOException {
         // Nuke the repo if we are told to start from scratch.
         if (shouldClean && Files.exists(repoDir)) {
             Files.walkFileTree(repoDir, new DeleteHierarchyVisitor());
@@ -219,7 +223,7 @@ public class SnowShovel {
                 GitTasks.loadBlob(git, entry.commit() + ":src/main/resources/test_stats.json", stream -> {
                     preTestStats.put(
                             id,
-                            TestCaseDef.loadTestStats(stream)
+                            new CommittedTestCaseDef(entry.commit(), TestCaseDef.loadTestStats(stream))
                     );
                 });
             }
@@ -251,7 +255,7 @@ public class SnowShovel {
 
                 String webhook = System.getenv("DISCORD_WEBHOOK");
                 if (webhook != null) {
-                    DiscordReportTask.generateReports(this, webhook, preTestStats, testStats);
+                    DiscordReportTask.generateReports(this, webhook, preTestStats, testStats, commitTitles);
                 }
             } else {
                 LOGGER.info("Nothing to do.");
@@ -380,11 +384,16 @@ public class SnowShovel {
             Path statsFile = repoDir.resolve("src/main/resources/test_stats.json");
             if (Files.exists(statsFile)) {
                 stats = TestCaseDef.loadTestStats(statsFile);
-                testStats.put(manifest.id(), stats);
             }
             // Generate Gradle project and misc files/reports, then commit the results.
             ProjectTasks.generateProjectFiles(this, javaVersion, libraries, manifest.id(), stats);
-            GitTasks.stageAndCommit(git, commitNameFunc.apply(newBranch, manifest));
+            var commitName = commitNameFunc.apply(newBranch, manifest);
+            var commit = GitTasks.stageAndCommit(git, commitName);
+
+            if (stats != null) {
+                testStats.put(manifest.id(), new CommittedTestCaseDef(commit, stats));
+            }
+            commitTitles.put(manifest.id(), commitName);
         }
 
         data.put(TAG_SNOW_SHOVEL_VERSION, VERSION);
@@ -453,7 +462,7 @@ public class SnowShovel {
         readme += GenerateReportTask.generateReport(
                 FastStream.of(VersionManifestTasks.allVersions(this).reversed())
                         .filter(e -> testStats.containsKey(e.id()))
-                        .map(e -> new GenerateReportTask.ReportPair(e.id(), testStats.get(e.id())))
+                        .map(e -> new GenerateReportTask.ReportPair(e.id(), testStats.get(e.id()).def()))
                         .toList()
         );
 

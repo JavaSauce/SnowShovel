@@ -105,18 +105,19 @@ public class GitTasks {
         }
     }
 
-    public static void stageAndCommit(Git git, String message) {
+    public static String stageAndCommit(Git git, String message) {
         LOGGER.info("Committing changes.");
         try {
             git.add()
                     .addFilepattern(".")
                     .call();
-            git.commit()
+            var rev = git.commit()
                     .setAuthor("SnowShovel", "snowshovel@javasauce.net")
                     .setCommitter("SnowShovel", "snowshovel@javasauce.net")
                     .setAllowEmpty(true)
                     .setMessage(message)
                     .call();
+            return rev.getId().getName();
         } catch (GitAPIException ex) {
             throw new RuntimeException("Failed to stage and commit changes.", ex);
         }

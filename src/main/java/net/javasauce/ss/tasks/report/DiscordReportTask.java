@@ -3,9 +3,12 @@ package net.javasauce.ss.tasks.report;
 import net.covers1624.quack.collection.FastStream;
 import net.javasauce.ss.SnowShovel;
 import net.javasauce.ss.tasks.VersionManifestTasks;
+import net.javasauce.ss.util.CommittedTestCaseDef;
 import net.javasauce.ss.util.DiscordWebhook;
 import net.javasauce.ss.util.VersionListManifest;
-import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.awt.*;
 import java.io.IOException;
@@ -18,10 +21,13 @@ import java.util.Map;
  */
 public class DiscordReportTask {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(DiscordReportTask.class);
+
     private static final String GS = "\uD83D\uDFE9";
     private static final String RS = "\uD83D\uDFE5";
 
-    public static void generateReports(SnowShovel ss, String webhook, Map<String, TestCaseDef> preTestStats, Map<String, TestCaseDef> postTestStats) throws IOException {
+    public static void generateReports(SnowShovel ss, String webhook, Map<String, CommittedTestCaseDef> preTestStats, Map<String, CommittedTestCaseDef> postTestStats, Map<String, String> commitTitles) throws IOException {
+        LOGGER.info("Building Discord reports.");
         var order = FastStream.of(VersionManifestTasks.allVersions(ss))
                 .map(VersionListManifest.Version::id)
                 .toList();
@@ -29,15 +35,15 @@ public class DiscordReportTask {
         List<List<DiscordWebhook.Embed>> embeds = new ArrayList<>();
         List<DiscordWebhook.Embed> building = new ArrayList<>();
         for (String id : order.reversed()) {
-            TestCaseDef pre = preTestStats.get(id);
-            TestCaseDef post = postTestStats.get(id);
+            CommittedTestCaseDef pre = preTestStats.get(id);
+            CommittedTestCaseDef post = postTestStats.get(id);
 
             if (post == null) continue; // We don't currently care about removals.
 
             if (pre == null) {
-                building.add(buildNewEmbed(id, post));
+                building.add(buildNewEmbed(ss, id, post, commitTitles.get(id)));
             } else {
-                building.add(buildComparisonEmbed(id, pre, post));
+                building.add(buildComparisonEmbed(ss, id, pre, post, commitTitles.get(id)));
             }
             if (building.size() == 10) {
                 embeds.add(List.copyOf(building));
@@ -48,6 +54,7 @@ public class DiscordReportTask {
             embeds.add(List.copyOf(building));
         }
 
+        LOGGER.info("Posting to discord.");
         for (var values : embeds) {
             new DiscordWebhook(webhook)
                     .addEmbeds(values)
@@ -60,10 +67,12 @@ public class DiscordReportTask {
         }
     }
 
-    private static DiscordWebhook.@NotNull Embed buildNewEmbed(String mcVersion, TestCaseDef def) {
-        var stats = GenerateReportTask.buildStats(def);
+    private static DiscordWebhook.Embed buildNewEmbed(SnowShovel ss, String mcVersion, CommittedTestCaseDef def, @Nullable String commitTitle) {
+        var stats = GenerateReportTask.buildStats(def.def());
         var embed = new DiscordWebhook.Embed()
                 .setTitle("New version: " + mcVersion)
+                .setUrl(ss.gitRepo + "/commits/" + def.commit())
+                .setDescription(String.valueOf(commitTitle))
                 .setColor(new Color(0x4CAF50));
         for (TestCaseState state : TestCaseState.VALUES.reversed()) {
             embed.addField(state.humanName, String.valueOf(stats.numCases()[state.ordinal()]), false);
@@ -71,15 +80,17 @@ public class DiscordReportTask {
         return embed;
     }
 
-    private static DiscordWebhook.Embed buildComparisonEmbed(String mcVersion, TestCaseDef left, TestCaseDef right) {
-        var comp = GenerateReportTask.compareCases(left, right);
+    private static DiscordWebhook.Embed buildComparisonEmbed(SnowShovel ss, String mcVersion, CommittedTestCaseDef left, CommittedTestCaseDef right, @Nullable String commitTitle) {
+        var comp = GenerateReportTask.compareCases(left.def(), right.def());
 
         var embed = new DiscordWebhook.Embed()
                 .setTitle("Version changed: " + mcVersion)
+                .setUrl(ss.gitRepo + "/compare/" + left.commit() + "..." + right.commit())
+                .setDescription(String.valueOf(commitTitle))
                 .setColor(new Color(0xFF9800));
         for (TestCaseState state : TestCaseState.VALUES.reversed()) {
             int i = state.ordinal();
-            if (comp.numCases()[i] == 0 && comp.removedTotal()[i] == 0) continue;
+            if (comp.addedTotal()[i] == 0 && comp.removedTotal()[i] == 0) continue;
             String summary = "";
             if (comp.improvedStats()[i] > 0) {
                 summary = GS + " " + comp.improvedStats()[i] + " improved";
