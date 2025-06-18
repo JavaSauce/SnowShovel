@@ -279,6 +279,10 @@ public class DiscordWebhook {
             return this;
         }
 
+        public boolean hasFields() {
+            return !fields.isEmpty();
+        }
+
         public record Footer(String text, String iconUrl) { }
 
         public record Thumbnail(String url) { }

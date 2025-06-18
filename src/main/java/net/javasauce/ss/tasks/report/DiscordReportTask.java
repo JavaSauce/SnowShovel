@@ -40,11 +40,16 @@ public class DiscordReportTask {
 
             if (post == null) continue; // We don't currently care about removals.
 
+            DiscordWebhook.Embed embed;
             if (pre == null) {
-                building.add(buildNewEmbed(ss, id, post, commitTitles.get(id)));
+                embed = buildNewEmbed(ss, id, post, commitTitles.get(id));
             } else {
-                building.add(buildComparisonEmbed(ss, id, pre, post, commitTitles.get(id)));
+                embed = buildComparisonEmbed(ss, id, pre, post, commitTitles.get(id));
             }
+            if (!embed.hasFields()) {
+                continue;
+            }
+            building.add(embed);
             if (building.size() == 10) {
                 embeds.add(List.copyOf(building));
                 building.clear();
