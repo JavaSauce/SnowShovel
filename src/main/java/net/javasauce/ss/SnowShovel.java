@@ -284,8 +284,7 @@ public class SnowShovel {
         mainCommitTitle += " " + commitTitle;
 
         LOGGER.info(commitTitle);
-        processAllVersions(git, data.get(TAG_DECOMPILER_VERSION), (_, _) -> commitTitle);
-        return true;
+        return processAllVersions(git, data.get(TAG_DECOMPILER_VERSION), (_, _) -> commitTitle);
     }
 
     private boolean tryRunMinecraftChanges(Git git) throws IOException {
@@ -294,11 +293,17 @@ public class SnowShovel {
         if (changedVersions == null) return false;
         LOGGER.info(" The following versions changed: {}", FastStream.of(changedVersions).map(VersionListManifest.Version::id).toList());
 
+        var manifests = filterTargets(VersionManifestTasks.getManifests(this, changedVersions));
+        if (manifests.isEmpty()) {
+            LOGGER.info("No tracked versions changed.");
+            return false;
+        }
+
         mainCommitTitle += " New Minecraft versions or changes.";
 
         processVersions(
                 git,
-                VersionManifestTasks.getManifests(this, changedVersions),
+                manifests,
                 data.get(TAG_DECOMPILER_VERSION),
                 (n, e) -> {
                     if (n) {
@@ -317,20 +322,25 @@ public class SnowShovel {
         if (latestDecompiler.equals(prev)) return false;
         LOGGER.info(" Decompiler version changed from {} to {}", prev, latestDecompiler);
 
-        String commitTitle = "Decompiler updated from " + prev + " to " + VERSION;
+        String commitTitle = "Decompiler updated from " + prev + " to " + latestDecompiler;
         mainCommitTitle += " " + commitTitle;
 
-        processAllVersions(git, latestDecompiler, (_, _) -> commitTitle);
-        return true;
+        return processAllVersions(git, latestDecompiler, (_, _) -> commitTitle);
     }
 
-    private void processAllVersions(Git git, @Nullable String decompilerVersion, BiFunction<Boolean, VersionManifest, String> commitNameFunc) throws IOException {
+    private boolean processAllVersions(Git git, @Nullable String decompilerVersion, BiFunction<Boolean, VersionManifest, String> commitNameFunc) throws IOException {
+        var manifests = filterTargets(VersionManifestTasks.getManifests(this, VersionManifestTasks.allVersions(this)));
+        if (manifests.isEmpty()) {
+            LOGGER.info("No versions to target.");
+            return false;
+        }
         processVersions(
                 git,
-                VersionManifestTasks.getManifests(this, VersionManifestTasks.allVersions(this)),
+                manifests,
                 decompilerVersion,
                 commitNameFunc
         );
+        return true;
     }
 
     private void processVersions(Git git, List<VersionManifest> manifests, @Nullable String decompilerVersion, BiFunction<Boolean, VersionManifest, String> commitNameFunc) throws IOException {
@@ -342,11 +352,10 @@ public class SnowShovel {
         }
         fastRemapper.resolveWithVersion("0.3.2.18");
         decompiler.resolveWithVersion(decompilerVersion);
-        var manifestsToProcess = filterTargets(manifests);
-        LOGGER.info("Found {} versions to process.", manifestsToProcess.size());
+        LOGGER.info("Found {} versions to process.", manifests.size());
         int i = 0;
-        for (VersionManifest manifest : manifestsToProcess) {
-            LOGGER.info("Processing version {} {}/{}", manifest.id(), ++i, manifestsToProcess.size());
+        for (VersionManifest manifest : manifests) {
+            LOGGER.info("Processing version {} {}/{}", manifest.id(), ++i, manifests.size());
             // Checkout or create a branch for this version.
             // We then immediately delete all files except the .git folder, because we are lazy :)
             boolean newBranch = GitTasks.checkoutOrCreateBranch(git, branchNameForVersion(manifest));
