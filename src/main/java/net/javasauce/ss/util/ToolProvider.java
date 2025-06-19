@@ -67,7 +67,7 @@ public final class ToolProvider {
         return toolFuture.join();
     }
 
-    public String findLatest() throws IOException {
+    public String findLatest() {
         var download = DownloadTasks.inMemoryDownload(ss.http, MAVEN + baseNotation.toModulePath() + "maven-metadata.xml", null);
 
         try {
@@ -80,8 +80,8 @@ public final class ToolProvider {
             return doc.getElementsByTagName("latest")
                     .item(0)
                     .getTextContent();
-        } catch (ParserConfigurationException | SAXException ex) {
-            throw new IOException("Failed to parse xml.", ex);
+        } catch (ParserConfigurationException | SAXException | IOException ex) {
+            throw new RuntimeException("Failed to parse xml.", ex);
         }
     }
 
