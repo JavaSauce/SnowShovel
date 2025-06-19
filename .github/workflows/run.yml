@@ -9,6 +9,7 @@ concurrency:
 jobs:
   run:
     runs-on: self-hosted
+    timeout-minutes: 1440
     steps:
       - uses: actions/checkout@v4
       - name: Setup Java 21
