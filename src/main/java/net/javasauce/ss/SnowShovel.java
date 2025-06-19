@@ -81,6 +81,13 @@ public class SnowShovel {
         mcChangesOpt.requiredUnless(autoOpt, selfChangesOpt, decompilerChangesOpt);
         decompilerChangesOpt.requiredUnless(autoOpt, selfChangesOpt, mcChangesOpt);
 
+        // Git flags.
+        OptionSpec<String> gitRepoOpt = parser.accepts("gitRepo", "The remote git repository to use.")
+                .withRequiredArg();
+
+        OptionSpec<Void> gitPushOpt = parser.accepts("gitPush", "If SnowShovel should push to the repository.");
+        OptionSpec<Void> gitCleanOpt = parser.accepts("gitClean", "If SnowShovel should delete the previous checkout (if available) before doing stuff.");
+
         // Dev flags.
         OptionSpec<String> versionOpt = parser.accepts("only-version", "Dev only flag. Filter the versions to process, limited to any specified by this flag.")
                 .withRequiredArg()
@@ -88,13 +95,6 @@ public class SnowShovel {
 
         OptionSpec<String> decompilerVersionOpt = parser.accepts("set-decompiler-version", "Dev only flag. Set the decompiler version to use.")
                 .withRequiredArg();
-
-        // Git flags.
-        OptionSpec<String> gitRepoOpt = parser.accepts("gitRepo", "The remote git repository to use.")
-                .withRequiredArg();
-
-        OptionSpec<Void> gitPushOpt = parser.accepts("gitPush", "If SnowShovel should push to the repository.");
-        OptionSpec<Void> gitCleanOpt = parser.accepts("gitClean", "If SnowShovel should delete the previous checkout (if available) before doing stuff.");
 
         OptionSet optSet = parser.parse(args);
         if (optSet.has(helpOpt)) {
