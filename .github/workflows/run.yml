@@ -16,9 +16,28 @@ jobs:
         with:
           java-version: 21
           distribution: 'temurin'
+      - name: Install AWS CLI
+        run: sudo apt update && sudo apt install -y python3 python3-pip
+      - name: Pull cache
+        env:
+          AWS_ENDPOINT_URL: ${{ secrets.AWS_ENDPOINT_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          aws s3 sync s3://snow-shovel-cache/libraries ./libraries
+          aws s3 sync s3://snow-shovel-cache/versions ./versions
       - name: Run
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           GIT_USER: JavaSauce
           GIT_PASS: ${{ secrets.GIT_PASS }}
         run: .github/scripts/run.sh --mode-auto --gitRepo https://github.com/JavaSauce/Shoveled --gitClean --gitPush
+      - name: Push cache
+        if: always()
+        env:
+          AWS_ENDPOINT_URL: ${{ secrets.AWS_ENDPOINT_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          aws s3 sync ./libraries s3://snow-shovel-cache/libraries
+          aws s3 sync ./versions s3://snow-shovel-cache/versions
