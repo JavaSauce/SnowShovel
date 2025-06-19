@@ -18,7 +18,7 @@ import java.util.concurrent.CompletableFuture;
  */
 public class VersionManifestTasks {
 
-    public static @Nullable List<VersionListManifest.Version> changedVersions(SnowShovel ss) throws IOException {
+    public static @Nullable ChangedVersionResult changedVersions(SnowShovel ss) throws IOException {
         var manifestFile = ss.cacheDir.resolve(VersionListManifest.FILE_NAME);
         if (Files.notExists(manifestFile)) return null;
 
@@ -33,11 +33,18 @@ public class VersionManifestTasks {
 
         var oldMap = oldManifest.versionsMap();
 
-        return FastStream.of(newManifest.versions())
+        var changedVersions = FastStream.of(newManifest.versions())
                 .filterNot(e -> IGNORED_VERSION.contains(e.id()))
                 .filter(e -> !oldMap.containsKey(e.id()) || !e.url().equals(oldMap.get(e.id()).url()))
                 .reversed() // Oldest first.
                 .toList();
+
+        return new ChangedVersionResult(
+                changedVersions,
+                FastStream.of(changedVersions)
+                        .filter(e -> !oldMap.containsKey(e.id()))
+                        .toSet()
+        );
     }
 
     public static List<VersionListManifest.Version> allVersions(SnowShovel ss) throws IOException {
@@ -54,8 +61,8 @@ public class VersionManifestTasks {
                 .toList();
     }
 
-    public static List<VersionManifest> getManifests(SnowShovel ss, List<VersionListManifest.Version> versions) {
-        var futures = FastStream.of(versions)
+    public static List<VersionManifest> getManifests(SnowShovel ss, FastStream<VersionListManifest.Version> versions) {
+        var futures = versions
                 .map(e -> VersionManifest.updateFuture(ss.http, ss.cacheDir, e))
                 .toList();
 
@@ -64,6 +71,9 @@ public class VersionManifestTasks {
                 .filter(e -> e.hasDownload("client") && e.hasDownload("client_mappings"))
                 .reversed() // Oldest first
                 .toList();
+    }
+
+    public record ChangedVersionResult(List<VersionListManifest.Version> versions, Set<VersionListManifest.Version> newVersions) {
     }
 
     private static final Set<String> IGNORED_VERSION = Set.of(

@@ -36,7 +36,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.BiFunction;
 
 import static java.util.List.of;
 
@@ -179,8 +178,6 @@ public class SnowShovel {
     private final Map<String, CommittedTestCaseDef> testStats = new HashMap<>();
     private final Map<String, String> commitTitles = new HashMap<>();
 
-    private @Nullable String mainCommitTitle;
-
     public SnowShovel(String gitRepo, Path workDir, boolean shouldPush, boolean shouldClean, @Nullable String decompilerOverride, List<String> mcVersionsOverride) {
         this.gitRepo = gitRepo;
         this.workDir = workDir;
@@ -229,192 +226,189 @@ public class SnowShovel {
             }
             testStats.putAll(preTestStats);
 
-            boolean didWork = switch (mode) {
-                case AUTOMATIC -> tryRunAutomatic(git);
-                case SELF_CHANGES -> tryRunSelfChanges(git);
-                case MC_CHANGES -> tryRunMinecraftChanges(git);
-                case DECOMPILER_CHANGES -> tryRunDecompilerChanges(git);
+            var runRequest = switch (mode) {
+                case AUTOMATIC -> detectAutomaticChanges();
+                case SELF_CHANGES -> detectSelfChanges();
+                case MC_CHANGES -> detectMinecraftChanges();
+                case DECOMPILER_CHANGES -> detectDecompilerChanges();
             };
 
-            if (didWork) {
-                // Switch back to the main branch, push the cache, regenerate our .gitignore/readme and commit.
-                GitTasks.checkoutOrCreateBranch(git, "main");
-                pushCache(data);
-                emitMainGitignore();
-                emitMainReadme();
-
-                if (mainCommitTitle == null) {
-                    throw new RuntimeException("No commit title was collected.");
-                }
-                GitTasks.stageAndCommit(git, mainCommitTitle);
-
-                // If enabled, push to git.
-                if (shouldPush) {
-                    GitTasks.pushAllBranches(git);
-                }
-
-                String webhook = System.getenv("DISCORD_WEBHOOK");
-                if (webhook != null) {
-                    DiscordReportTask.generateReports(this, webhook, preTestStats, testStats, commitTitles);
-                }
-            } else {
+            if (runRequest == null) {
                 LOGGER.info("Nothing to do.");
+                return;
             }
-        }
-        LOGGER.info("Done!");
-    }
 
-    @SuppressWarnings ("RedundantIfStatement")
-    private boolean tryRunAutomatic(Git git) throws IOException {
-        LOGGER.info("Running in Automatic mode.");
-        mainCommitTitle = "Automatic run: ";
-        if (tryRunSelfChanges(git)) return true;
-        if (tryRunMinecraftChanges(git)) return true;
-        if (tryRunDecompilerChanges(git)) return true;
+            // If we are overridden use that.
+            var decompilerVersion = runRequest.decompilerVersion;
+            if (decompilerOverride != null) {
+                decompilerVersion = decompilerOverride;
+            }
 
-        return false;
-    }
-
-    private boolean tryRunSelfChanges(Git git) throws IOException {
-        LOGGER.info("Checking for changes to SnowShovel version since last run..");
-        var prev = data.get(TAG_SNOW_SHOVEL_VERSION);
-        if (VERSION.equals(prev)) return false;
-
-        String commitTitle = "SnowShovel updated from " + prev + " to " + VERSION;
-        mainCommitTitle += " " + commitTitle;
-
-        LOGGER.info(commitTitle);
-        return processAllVersions(git, data.get(TAG_DECOMPILER_VERSION), (n, e) -> commitTitle);
-    }
-
-    private boolean tryRunMinecraftChanges(Git git) throws IOException {
-        LOGGER.info("Checking for changes to Minecraft versions since last run..");
-        var changedVersions = VersionManifestTasks.changedVersions(this);
-        if (changedVersions == null) return false;
-        LOGGER.info(" The following versions changed: {}", FastStream.of(changedVersions).map(VersionListManifest.Version::id).toList());
-
-        var manifests = filterTargets(VersionManifestTasks.getManifests(this, changedVersions));
-        if (manifests.isEmpty()) {
-            LOGGER.info("No tracked versions changed.");
-            return false;
-        }
-
-        mainCommitTitle += " New Minecraft versions or changes.";
-
-        processVersions(
-                git,
-                manifests,
-                data.get(TAG_DECOMPILER_VERSION),
-                (n, e) -> {
-                    if (n) {
-                        return "New version " + e.id();
-                    }
-                    return "Version manifest changed.";
-                }
-        );
-        return true;
-    }
-
-    private boolean tryRunDecompilerChanges(Git git) throws IOException {
-        LOGGER.info("Checking for changes to Decompiler version since last run..");
-        var prev = data.get(TAG_DECOMPILER_VERSION);
-        String latestDecompiler = decompiler.findLatest();
-        if (latestDecompiler.equals(prev)) return false;
-        LOGGER.info(" Decompiler version changed from {} to {}", prev, latestDecompiler);
-
-        String commitTitle = "Decompiler updated from " + prev + " to " + latestDecompiler;
-        mainCommitTitle += " " + commitTitle;
-
-        return processAllVersions(git, latestDecompiler, (n, e) -> commitTitle);
-    }
-
-    private boolean processAllVersions(Git git, @Nullable String decompilerVersion, BiFunction<Boolean, VersionManifest, String> commitNameFunc) throws IOException {
-        var manifests = filterTargets(VersionManifestTasks.getManifests(this, VersionManifestTasks.allVersions(this)));
-        if (manifests.isEmpty()) {
-            LOGGER.info("No versions to target.");
-            return false;
-        }
-        processVersions(
-                git,
-                manifests,
-                decompilerVersion,
-                commitNameFunc
-        );
-        return true;
-    }
-
-    private void processVersions(Git git, List<VersionManifest> manifests, @Nullable String decompilerVersion, BiFunction<Boolean, VersionManifest, String> commitNameFunc) throws IOException {
-        // If we are overridden use that.
-        if (decompilerOverride != null) decompilerVersion = decompilerOverride;
-
-        if (decompilerVersion == null) {
-            decompilerVersion = decompiler.findLatest();
-        }
-        fastRemapper.resolveWithVersion("0.3.2.18");
-        decompiler.resolveWithVersion(decompilerVersion);
-        LOGGER.info("Found {} versions to process.", manifests.size());
-        int i = 0;
-        for (VersionManifest manifest : manifests) {
-            LOGGER.info("Processing version {} {}/{}", manifest.id(), ++i, manifests.size());
-            // Checkout or create a branch for this version.
-            // We then immediately delete all files except the .git folder, because we are lazy :)
-            boolean newBranch = GitTasks.checkoutOrCreateBranch(git, branchNameForVersion(manifest));
-            GitTasks.removeAllFiles(repoDir);
-
-            // Download the client jar and client mappings proguard log.
-            var clientJarFuture = manifest.requireDownloadAsync(http, versionsDir, "client", "jar");
-            var clientMappingsFuture = manifest.requireDownloadAsync(http, versionsDir, "client_mappings", "mojmap");
-            CompletableFuture.allOf(clientJarFuture, clientMappingsFuture).join();
-            var clientJar = clientJarFuture.join();
-            var clientMappings = clientMappingsFuture.join();
-
-            // Remap the jar.
-            var remappedJar = clientJar.resolveSibling(FilenameUtils.getBaseName(clientJar.toString()) + "-remapped.jar");
-            RemapperTasks.runRemapper(this, clientJar, clientMappings, remappedJar);
-
-            // Compute and download all the libraries.
-            List<LibraryTasks.LibraryDownload> libraries = LibraryTasks.getVersionLibraries(manifest, librariesDir);
-            LibraryTasks.downloadLibraries(http, libraries);
-
-            // Run the decompiler.
-            JavaVersion javaVersion = manifest.computeJavaVersion();
-            DecompileTasks.decompileAndTest(
+            if (decompilerVersion == null) {
+                decompilerVersion = decompiler.findLatest();
+            }
+            Map<String, String> commitNames = FastStream.of(runRequest.versions)
+                    .toMap(e -> e.version.id(), e -> e.commitName);
+            var manifests = VersionManifestTasks.getManifests(
                     this,
-                    javaVersion,
-                    FastStream.of(libraries)
-                            .map(LibraryTasks.LibraryDownload::path)
-                            .toList(),
-                    remappedJar,
-                    repoDir
+                    FastStream.of(runRequest.versions)
+                            .map(e -> e.version)
+                            .filter(e -> mcVersionsOverride.isEmpty() || mcVersionsOverride.contains(e.id()))
             );
 
-            // Load the stats for this version.
-            TestCaseDef stats = null;
-            Path statsFile = repoDir.resolve("src/main/resources/test_stats.json");
-            if (Files.exists(statsFile)) {
-                stats = TestCaseDef.loadTestStats(statsFile);
+            fastRemapper.resolveWithVersion("0.3.2.18");
+            decompiler.resolveWithVersion(decompilerVersion);
+            LOGGER.info("Found {} versions to process.", manifests.size());
+            int i = 0;
+            for (VersionManifest manifest : manifests) {
+                LOGGER.info("Processing version {} {}/{}", manifest.id(), ++i, manifests.size());
+                processVersion(git, manifest, commitNames.get(manifest.id()));
             }
-            // Generate Gradle project and misc files/reports, then commit the results.
-            ProjectTasks.generateProjectFiles(this, javaVersion, libraries, manifest.id(), stats);
-            var commitName = commitNameFunc.apply(newBranch, manifest);
-            var commit = GitTasks.stageAndCommit(git, commitName);
 
-            if (stats != null) {
-                testStats.put(manifest.id(), new CommittedTestCaseDef(commit, stats));
+            data.put(TAG_SNOW_SHOVEL_VERSION, VERSION);
+            data.put(TAG_DECOMPILER_VERSION, decompilerVersion);
+
+            // Switch back to the main branch, push the cache, regenerate our .gitignore/readme and commit.
+            GitTasks.checkoutOrCreateBranch(git, "main");
+            pushCache(data);
+            emitMainGitignore();
+            emitMainReadme();
+
+            GitTasks.stageAndCommit(git, runRequest.reason);
+
+            // If enabled, push to git.
+            if (shouldPush) {
+                GitTasks.pushAllBranches(git);
             }
-            commitTitles.put(manifest.id(), commitName);
+
+            String webhook = System.getenv("DISCORD_WEBHOOK");
+            if (webhook != null) {
+                DiscordReportTask.generateReports(this, webhook, preTestStats, testStats, commitTitles);
+            }
+        } finally {
+            LOGGER.info("Done!");
         }
-
-        data.put(TAG_SNOW_SHOVEL_VERSION, VERSION);
-        data.put(TAG_DECOMPILER_VERSION, decompilerVersion);
     }
 
-    private List<VersionManifest> filterTargets(List<VersionManifest> manifests) {
-        if (mcVersionsOverride.isEmpty()) return manifests;
+    private @Nullable RunRequest detectAutomaticChanges() throws IOException {
+        LOGGER.info("Running in Automatic mode.");
+        RunRequest request = detectSelfChanges();
+        if (request == null) {
+            request = detectMinecraftChanges();
+        }
+        if (request == null) {
+            request = detectDecompilerChanges();
+        }
 
-        return FastStream.of(manifests)
-                .filter(e -> mcVersionsOverride.contains(e.id()))
+        if (request == null) return null;
+
+        return new RunRequest(
+                request.mode,
+                "Automatic run: " + request.reason,
+                request.decompilerVersion,
+                request.versions
+        );
+    }
+
+    private @Nullable RunRequest detectSelfChanges() throws IOException {
+        LOGGER.info("Checking for changes to SnowShovel version since last run..");
+        var prev = data.get(TAG_SNOW_SHOVEL_VERSION);
+        if (VERSION.equals(prev)) return null;
+
+        var commit = "SnowShovel updated from " + prev + " to " + VERSION;
+        return new RunRequest(
+                Mode.SELF_CHANGES,
+                commit,
+                null,
+                allVersions(commit)
+        );
+    }
+
+    private @Nullable RunRequest detectMinecraftChanges() throws IOException {
+        LOGGER.info("Checking for changes to Minecraft versions since last run..");
+        var changedVersions = VersionManifestTasks.changedVersions(this);
+        if (changedVersions == null) return null;
+        LOGGER.info(" The following versions changed: {}", FastStream.of(changedVersions.versions()).map(VersionListManifest.Version::id).toList());
+
+        return new RunRequest(
+                Mode.MC_CHANGES,
+                "New Minecraft versions or changes.",
+                null,
+                FastStream.of(changedVersions.versions())
+                        .map(e -> new VersionRequest(e, changedVersions.newVersions().contains(e) ? "New version: " + e.id() : "Version manifest changed."))
+                        .toList()
+        );
+    }
+
+    private @Nullable RunRequest detectDecompilerChanges() throws IOException {
+        LOGGER.info("Checking for changes to Decompiler version since last run..");
+
+        var prev = data.get(TAG_DECOMPILER_VERSION);
+        String latestDecompiler = decompiler.findLatest();
+        if (latestDecompiler.equals(prev)) return null;
+
+        var commit = "Decompiler updated from " + prev + " to " + latestDecompiler;
+        return new RunRequest(
+                Mode.DECOMPILER_CHANGES,
+                commit,
+                latestDecompiler,
+                allVersions(commit)
+        );
+    }
+
+    private List<VersionRequest> allVersions(String commitName) throws IOException {
+        return FastStream.of(VersionManifestTasks.allVersions(this))
+                .map(e -> new VersionRequest(e, commitName))
                 .toList();
+    }
+
+    private void processVersion(Git git, VersionManifest manifest, String commitName) throws IOException {
+        // Checkout or create a branch for this version.
+        // We then immediately delete all files except the .git folder, because we are lazy :)
+        GitTasks.checkoutOrCreateBranch(git, branchNameForVersion(manifest));
+        GitTasks.removeAllFiles(repoDir);
+
+        // Download the client jar and client mappings proguard log.
+        var clientJarFuture = manifest.requireDownloadAsync(http, versionsDir, "client", "jar");
+        var clientMappingsFuture = manifest.requireDownloadAsync(http, versionsDir, "client_mappings", "mojmap");
+        CompletableFuture.allOf(clientJarFuture, clientMappingsFuture).join();
+        var clientJar = clientJarFuture.join();
+        var clientMappings = clientMappingsFuture.join();
+
+        // Remap the jar.
+        var remappedJar = clientJar.resolveSibling(FilenameUtils.getBaseName(clientJar.toString()) + "-remapped.jar");
+        RemapperTasks.runRemapper(this, clientJar, clientMappings, remappedJar);
+
+        // Compute and download all the libraries.
+        List<LibraryTasks.LibraryDownload> libraries = LibraryTasks.getVersionLibraries(manifest, librariesDir);
+        LibraryTasks.downloadLibraries(http, libraries);
+
+        // Run the decompiler.
+        JavaVersion javaVersion = manifest.computeJavaVersion();
+        DecompileTasks.decompileAndTest(
+                this,
+                javaVersion,
+                FastStream.of(libraries)
+                        .map(LibraryTasks.LibraryDownload::path)
+                        .toList(),
+                remappedJar,
+                repoDir
+        );
+
+        // Load the stats for this version.
+        TestCaseDef stats = null;
+        Path statsFile = repoDir.resolve("src/main/resources/test_stats.json");
+        if (Files.exists(statsFile)) {
+            stats = TestCaseDef.loadTestStats(statsFile);
+        }
+        // Generate Gradle project and misc files/reports, then commit the results.
+        ProjectTasks.generateProjectFiles(this, javaVersion, libraries, manifest.id(), stats);
+        var commit = GitTasks.stageAndCommit(git, commitName);
+
+        if (stats != null) {
+            testStats.put(manifest.id(), new CommittedTestCaseDef(commit, stats));
+        }
+        commitTitles.put(manifest.id(), commitName);
     }
 
     private Map<String, String> pullCache() throws IOException {
@@ -482,10 +476,23 @@ public class SnowShovel {
         return manifest.type() + "/" + manifest.id();
     }
 
-    private enum Mode {
+    public enum Mode {
         AUTOMATIC,
         SELF_CHANGES,
         MC_CHANGES,
         DECOMPILER_CHANGES
     }
+
+    public record RunRequest(
+            Mode mode,
+            String reason,
+            @Nullable String decompilerVersion,
+            List<VersionRequest> versions
+    ) {
+    }
+
+    public record VersionRequest(
+            VersionListManifest.Version version,
+            String commitName
+    ) { }
 }
