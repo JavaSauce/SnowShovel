@@ -208,27 +208,18 @@ public class SnowShovel implements AutoCloseable {
             return;
         }
 
-        // If we are overridden use that.
+        var toProcess = prepareRequestedVersions(runRequest.versions)
+                .toList();
         var decompilerVersion = decompilerOverride
                 .or(() -> Optional.ofNullable(runRequest.decompilerVersion))
                 .orElseGet(decompiler::findLatest);
-
-        Map<String, String> commitNames = FastStream.of(runRequest.versions)
-                .toMap(e -> e.version.id(), e -> e.commitName);
-        var manifests = VersionManifestTasks.getManifests(
-                this,
-                FastStream.of(runRequest.versions)
-                        .map(e -> e.version)
-                        .filter(e -> mcVersionsOverride.isEmpty() || mcVersionsOverride.contains(e.id()))
-        );
-
         fastRemapper.resolveWithVersion("0.3.2.18");
         decompiler.resolveWithVersion(decompilerVersion);
-        LOGGER.info("Found {} versions to process.", manifests.size());
+        LOGGER.info("Found {} versions to process.", toProcess.size());
         int i = 0;
-        for (VersionManifest manifest : manifests) {
-            LOGGER.info("Processing version {} {}/{}", manifest.id(), ++i, manifests.size());
-            processVersion(git, manifest, commitNames.get(manifest.id()));
+        for (var version : toProcess) {
+            LOGGER.info("Processing version {} {}/{}", version.manifest.id(), ++i, toProcess.size());
+            processVersion(git, version.manifest, version.commitName);
         }
 
         data.put(TAG_SNOW_SHOVEL_VERSION, VERSION);
@@ -324,6 +315,20 @@ public class SnowShovel implements AutoCloseable {
         return FastStream.of(VersionManifestTasks.allVersions(this))
                 .map(e -> new VersionRequest(e, commitName))
                 .toList();
+    }
+
+    private FastStream<ProcessableVersion> prepareRequestedVersions(List<VersionRequest> requests) {
+        Map<String, String> commitNames = FastStream.of(requests)
+                .toMap(e -> e.version.id(), e -> e.commitName);
+        var manifestsStream = VersionManifestTasks.getManifests(
+                this,
+                FastStream.of(requests)
+                        .map(e -> e.version)
+                        .filter(e -> mcVersionsOverride.isEmpty() || mcVersionsOverride.contains(e.id()))
+        );
+        return manifestsStream
+                .map(e -> new ProcessableVersion(e, commitNames.get(e.id())));
+
     }
 
     private void processVersion(Git git, VersionManifest manifest, String commitName) throws IOException {
@@ -468,6 +473,11 @@ public class SnowShovel implements AutoCloseable {
 
     public record VersionRequest(
             VersionListManifest.Version version,
+            String commitName
+    ) { }
+
+    public record ProcessableVersion(
+            VersionManifest manifest,
             String commitName
     ) { }
 }

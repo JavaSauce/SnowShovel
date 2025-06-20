@@ -61,7 +61,7 @@ public class VersionManifestTasks {
                 .toList();
     }
 
-    public static List<VersionManifest> getManifests(SnowShovel ss, FastStream<VersionListManifest.Version> versions) {
+    public static FastStream<VersionManifest> getManifests(SnowShovel ss, FastStream<VersionListManifest.Version> versions) {
         var futures = versions
                 .map(e -> VersionManifest.updateFuture(ss.http, ss.cacheDir, e))
                 .toList();
@@ -69,8 +69,7 @@ public class VersionManifestTasks {
         return FastStream.of(futures)
                 .map(CompletableFuture::join)
                 .filter(e -> e.hasDownload("client") && e.hasDownload("client_mappings"))
-                .reversed() // Oldest first
-                .toList();
+                .reversed(); // Oldest first
     }
 
     public record ChangedVersionResult(List<VersionListManifest.Version> versions, Set<VersionListManifest.Version> newVersions) {
