@@ -6,6 +6,7 @@ import com.google.gson.reflect.TypeToken;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
+import joptsimple.util.EnumConverter;
 import net.covers1624.curl4j.CABundle;
 import net.covers1624.curl4j.httpapi.Curl4jHttpEngine;
 import net.covers1624.jdkutils.JavaVersion;
@@ -65,22 +66,10 @@ public class SnowShovel implements AutoCloseable {
 
         OptionSpec<Void> helpOpt = parser.acceptsAll(of("h", "help"), "Prints this help").forHelp();
 
-        var autoOpt = parser.accepts("mode-auto", "Set SnowShovel into Auto mode. Determines what to run each time its invoked. Fist, handling updates of itself. Then, minecraft updates. Finally, decompiler updates.");
-        var selfChangesOpt = parser.accepts("mode-snowShovelChanged", "Set SnowShovel into Self-change mode. Minecraft updates will not be polled and the Decompiler will not be updated. All versions will be re-processed.");
-        var mcChangesOpt = parser.accepts("mode-minecraftChanged", "Set SnowShovel into Minecraft-change mode. Minecraft versions will be polled again, and updates will be processed. The Decompiler will not be updated. Only changed versions will be processed.");
-        var decompilerChangesOpt = parser.accepts("mode-decompilerChanged", "Set SnowShovel into Decompiler-change mode. Minecraft updates will not be polled. The Decompiler will be updated. All versions will be re-processed.");
-
-        // All these options are incompatible with each other.
-        autoOpt.availableUnless(selfChangesOpt, mcChangesOpt, decompilerChangesOpt);
-        selfChangesOpt.availableUnless(autoOpt, mcChangesOpt, decompilerChangesOpt);
-        mcChangesOpt.availableUnless(autoOpt, selfChangesOpt, decompilerChangesOpt);
-        decompilerChangesOpt.availableUnless(autoOpt, selfChangesOpt, mcChangesOpt);
-
-        // One of them must be supplied.
-        autoOpt.requiredUnless(selfChangesOpt, mcChangesOpt, decompilerChangesOpt);
-        selfChangesOpt.requiredUnless(autoOpt, mcChangesOpt, decompilerChangesOpt);
-        mcChangesOpt.requiredUnless(autoOpt, selfChangesOpt, decompilerChangesOpt);
-        decompilerChangesOpt.requiredUnless(autoOpt, selfChangesOpt, mcChangesOpt);
+        var modeOpt = parser.accepts("mode", "Set the mode to run in. Usually AUTO unless testing.")
+                .withRequiredArg()
+                .required()
+                .withValuesConvertedBy(new EnumConverter<>(Mode.class) { });
 
         // Git flags.
         OptionSpec<String> gitRepoOpt = parser.accepts("gitRepo", "The remote git repository to use.")
@@ -121,19 +110,6 @@ public class SnowShovel implements AutoCloseable {
         }
         CredentialsProvider.setDefault(new UsernamePasswordCredentialsProvider(gitUser, gitPass));
 
-        Mode mode;
-        if (optSet.has(autoOpt)) {
-            mode = Mode.AUTOMATIC;
-        } else if (optSet.has(selfChangesOpt)) {
-            mode = Mode.SELF_CHANGES;
-        } else if (optSet.has(mcChangesOpt)) {
-            mode = Mode.MC_CHANGES;
-        } else if (optSet.has(decompilerChangesOpt)) {
-            mode = Mode.DECOMPILER_CHANGES;
-        } else {
-            throw new RuntimeException("No modes specified?");
-        }
-
         var ss = new SnowShovel(
                 gitRepo,
                 Path.of(".").toAbsolutePath().normalize(),
@@ -143,7 +119,7 @@ public class SnowShovel implements AutoCloseable {
                 optSet.valuesOf(versionOpt)
         );
         try (ss) {
-            ss.run(mode);
+            ss.run(optSet.valueOf(modeOpt));
         }
 
         LOGGER.info("Done!");
@@ -221,7 +197,7 @@ public class SnowShovel implements AutoCloseable {
         testStats.putAll(preTestStats);
 
         var runRequest = switch (mode) {
-            case AUTOMATIC -> detectAutomaticChanges();
+            case AUTO -> detectAutomaticChanges();
             case SELF_CHANGES -> detectSelfChanges();
             case MC_CHANGES -> detectMinecraftChanges();
             case DECOMPILER_CHANGES -> detectDecompilerChanges();
@@ -295,7 +271,6 @@ public class SnowShovel implements AutoCloseable {
         if (request == null) return null;
 
         return new RunRequest(
-                request.mode,
                 "Automatic run: " + request.reason,
                 request.decompilerVersion,
                 request.versions
@@ -309,7 +284,6 @@ public class SnowShovel implements AutoCloseable {
 
         var commit = "SnowShovel updated from " + prev + " to " + VERSION;
         return new RunRequest(
-                Mode.SELF_CHANGES,
                 commit,
                 null,
                 allVersions(commit)
@@ -323,7 +297,6 @@ public class SnowShovel implements AutoCloseable {
         LOGGER.info(" The following versions changed: {}", FastStream.of(changedVersions.versions()).map(VersionListManifest.Version::id).toList());
 
         return new RunRequest(
-                Mode.MC_CHANGES,
                 "New Minecraft versions or changes.",
                 null,
                 FastStream.of(changedVersions.versions())
@@ -341,7 +314,6 @@ public class SnowShovel implements AutoCloseable {
 
         var commit = "Decompiler updated from " + prev + " to " + latestDecompiler;
         return new RunRequest(
-                Mode.DECOMPILER_CHANGES,
                 commit,
                 latestDecompiler,
                 allVersions(commit)
@@ -481,20 +453,18 @@ public class SnowShovel implements AutoCloseable {
         git.close();
     }
 
-    public enum Mode {
-        AUTOMATIC,
+    private enum Mode {
+        AUTO,
         SELF_CHANGES,
         MC_CHANGES,
         DECOMPILER_CHANGES
     }
 
     public record RunRequest(
-            Mode mode,
             String reason,
             @Nullable String decompilerVersion,
             List<VersionRequest> versions
-    ) {
-    }
+    ) { }
 
     public record VersionRequest(
             VersionListManifest.Version version,

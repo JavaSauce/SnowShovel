@@ -30,7 +30,7 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           GIT_USER: JavaSauce
           GIT_PASS: ${{ secrets.GIT_PASS }}
-        run: .github/scripts/run.sh --mode-auto --gitRepo https://github.com/JavaSauce/Shoveled --gitClean --gitPush
+        run: .github/scripts/run.sh --mode AUTO --gitRepo https://github.com/JavaSauce/Shoveled --gitClean --gitPush
       - name: Push cache
         if: always()
         env:
