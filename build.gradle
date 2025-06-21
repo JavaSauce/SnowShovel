@@ -40,7 +40,7 @@ dependencies {
 
     implementation 'net.sf.jopt-simple:jopt-simple:5.0.4'
 
-    implementation 'net.covers1624:Quack:0.4.10.113'
+    implementation 'net.covers1624:Quack:0.4.10.117'
     implementation 'net.covers1624:JdkUtils:0.6.0.24'
     implementation 'net.covers1624:curl4j:3.0.16:libcurl'
     implementation 'com.google.code.gson:gson:2.11.0'

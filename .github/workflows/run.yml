@@ -7,9 +7,30 @@ concurrency:
   group: ${{ github.workflow }}
 
 jobs:
-  run:
+  discover:
     runs-on: self-hosted
-    timeout-minutes: 1440
+    outputs:
+      matrix: ${{ steps.split_work.outputs.work }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: 'temurin'
+      - name: Split work
+        id: split_work
+        env:
+          GIT_USER: JavaSauce
+          GIT_PASS: ${{ secrets.GIT_PASS }}
+        run: |
+          .github/scripts/run.sh --mode AUTO --gitRepo https://github.com/JavaSauce/Shoveled --gen-matrix ./matrix.json
+          echo "work=$(jq -c . matrix.json)" | tee $GITHUB_OUTPUT
+  process_versions:
+    runs-on: self-hosted
+    needs: [ discover ]
+    strategy:
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
       - name: Setup Java 21
@@ -24,13 +45,15 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           aws s3 sync --no-progress s3://snow-shovel-cache/libraries ./libraries
-          aws s3 sync --no-progress s3://snow-shovel-cache/versions ./versions
-      - name: Run
+          includes="$(echo ${{ matrix.job.config }} | jq -r '[.versions.[].id | "--include \(.)/*"] | join(" ")')"
+          aws s3 sync --no-progress --exclude "*" $includes s3://snow-shovel-cache/versions ./versions
+      - name: ${{ matrix.job.name }}
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           GIT_USER: JavaSauce
           GIT_PASS: ${{ secrets.GIT_PASS }}
-        run: .github/scripts/run.sh --mode AUTO --gitRepo https://github.com/JavaSauce/Shoveled --gitClean --gitPush
+        run: |
+          echo "${{ matrix.job.config }}" > matrix.json
+          .github/scripts/run.sh --gitRepo https://github.com/JavaSauce/Shoveled --gitClean --gitPush --run-matrix matrix.json
       - name: Push cache
         if: always()
         env:
@@ -40,3 +63,21 @@ jobs:
         run: |
           aws s3 sync --no-progress ./libraries s3://snow-shovel-cache/libraries
           aws s3 sync --no-progress ./versions s3://snow-shovel-cache/versions
+  finalize_run:
+    runs-on: self-hosted
+    needs: [ discover, process_versions ]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: 'temurin'
+      - name: Run
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          GIT_USER: JavaSauce
+          GIT_PASS: ${{ secrets.GIT_PASS }}
+        run: |
+          echo "${{ needs.discover.outputs.matrix }}" > matrix.json
+          .github/scripts/run.sh --gitRepo https://github.com/JavaSauce/Shoveled --gitClean --gitPush --finalize-matrix matrix.json

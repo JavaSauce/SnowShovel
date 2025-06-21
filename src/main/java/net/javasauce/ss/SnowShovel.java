@@ -7,6 +7,8 @@ import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import joptsimple.util.EnumConverter;
+import joptsimple.util.PathConverter;
+import joptsimple.util.PathProperties;
 import net.covers1624.curl4j.CABundle;
 import net.covers1624.curl4j.httpapi.Curl4jHttpEngine;
 import net.covers1624.jdkutils.JavaVersion;
@@ -15,6 +17,7 @@ import net.covers1624.quack.gson.JsonUtils;
 import net.covers1624.quack.io.CopyingFileVisitor;
 import net.covers1624.quack.maven.MavenNotation;
 import net.covers1624.quack.net.httpapi.HttpEngine;
+import net.covers1624.quack.util.SneakyUtils;
 import net.javasauce.ss.tasks.*;
 import net.javasauce.ss.tasks.report.DiscordReportTask;
 import net.javasauce.ss.tasks.report.GenerateReportTask;
@@ -33,10 +36,7 @@ import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 import static java.util.List.of;
@@ -66,10 +66,35 @@ public class SnowShovel implements AutoCloseable {
 
         OptionSpec<Void> helpOpt = parser.acceptsAll(of("h", "help"), "Prints this help").forHelp();
 
+        var runMatrixBuilder = parser.accepts("run-matrix", "Run using a matrix segment.");
+        var finalizeMatrixBuilder = parser.accepts("finalize-matrix", "Finalize a matrix run.");
+
         var modeOpt = parser.accepts("mode", "Set the mode to run in. Usually AUTO unless testing.")
+                .requiredUnless(runMatrixBuilder, finalizeMatrixBuilder)
                 .withRequiredArg()
-                .required()
-                .withValuesConvertedBy(new EnumConverter<>(Mode.class) { });
+                .withValuesConvertedBy(new EnumConverter<>(Mode.class) { })
+                .defaultsTo(Mode.AUTO);
+
+        var genMatrixOpt = parser.accepts("gen-matrix", "Generate a matrix to use for the given mode.")
+                .availableIf(modeOpt)
+                .withRequiredArg()
+                .withValuesConvertedBy(new PathConverter());
+
+        var matrixSizeOpt = parser.accepts("matrix-size", "The number of versions to process in each job.")
+                .availableIf(genMatrixOpt)
+                .withRequiredArg()
+                .ofType(Integer.class)
+                .defaultsTo(8);
+
+        var useMatrixOpt = runMatrixBuilder
+                .availableUnless(modeOpt)
+                .withRequiredArg()
+                .withValuesConvertedBy(new PathConverter(PathProperties.FILE_EXISTING));
+
+        var finalizeMatrixOpt = finalizeMatrixBuilder
+                .availableUnless(modeOpt)
+                .withRequiredArg()
+                .withValuesConvertedBy(new PathConverter(PathProperties.FILE_EXISTING));
 
         // Git flags.
         OptionSpec<String> gitRepoOpt = parser.accepts("gitRepo", "The remote git repository to use.")
@@ -119,7 +144,19 @@ public class SnowShovel implements AutoCloseable {
                 optSet.valuesOf(versionOpt)
         );
         try (ss) {
-            ss.run(optSet.valueOf(modeOpt));
+            if (optSet.has(genMatrixOpt)) {
+                ss.runGenMatrix(
+                        optSet.valueOf(modeOpt),
+                        optSet.valueOf(matrixSizeOpt),
+                        optSet.valueOf(genMatrixOpt)
+                );
+            } else if (optSet.has(useMatrixOpt)) {
+                ss.runUseMatrix(optSet.valueOf(useMatrixOpt));
+            } else if (optSet.has(finalizeMatrixOpt)) {
+                ss.runFinalizeMatrix(optSet.valueOf(finalizeMatrixOpt));
+            } else {
+                ss.run(optSet.valueOf(modeOpt));
+            }
         }
 
         LOGGER.info("Done!");
@@ -128,6 +165,7 @@ public class SnowShovel implements AutoCloseable {
     private static final Gson GSON = new GsonBuilder()
             .setPrettyPrinting()
             .create();
+    private static final Gson GSON_MINIFIED = new GsonBuilder().create();
     private static final Type MAP_STRING_TYPE = new TypeToken<Map<String, String>>() { }.getType();
 
     private static final String TAG_SNOW_SHOVEL_VERSION = "SnowShovelVersion";
@@ -193,7 +231,7 @@ public class SnowShovel implements AutoCloseable {
     }
 
     private void run(Mode mode) throws IOException {
-        pullStatsFromBranches();
+        testStats.putAll(pullStatsFromBranches());
         testStats.putAll(preTestStats);
 
         var runRequest = switch (mode) {
@@ -218,14 +256,32 @@ public class SnowShovel implements AutoCloseable {
         LOGGER.info("Found {} versions to process.", toProcess.size());
         int i = 0;
         for (var version : toProcess) {
-            LOGGER.info("Processing version {} {}/{}", version.manifest.id(), ++i, toProcess.size());
-            processVersion(git, version.manifest, version.commitName);
+            var manifest = version.manifest;
+            LOGGER.info("Processing version {} {}/{}", manifest.id(), ++i, toProcess.size());
+            GitTasks.checkoutOrCreateBranch(git, branchNameForVersion(manifest));
+            GitTasks.removeAllFiles(repoDir);
+
+            var stats = processVersion(manifest);
+
+            var commit = GitTasks.stageAndCommit(git, version.commitName);
+
+            if (stats != null) {
+                testStats.put(manifest.id(), new CommittedTestCaseDef(commit, stats));
+            }
+            commitTitles.put(manifest.id(), version.commitName);
         }
 
         data.put(TAG_SNOW_SHOVEL_VERSION, VERSION);
         data.put(TAG_DECOMPILER_VERSION, decompilerVersion);
 
-        commitAndPushToMain(runRequest);
+
+        GitTasks.checkoutOrCreateBranch(git, "main");
+        rebuildMain();
+        GitTasks.stageAndCommit(git, runRequest.reason);
+
+        if (shouldPush) {
+            GitTasks.pushAllBranches(git);
+        }
 
         String webhook = System.getenv("DISCORD_WEBHOOK");
         if (webhook != null) {
@@ -233,20 +289,149 @@ public class SnowShovel implements AutoCloseable {
         }
     }
 
-    private void pullStatsFromBranches() throws IOException {
+    private void runGenMatrix(Mode mode, int size, Path matrixOutput) throws IOException {
+        var runRequest = switch (mode) {
+            case AUTO -> detectAutomaticChanges();
+            case SELF_CHANGES -> detectSelfChanges();
+            case MC_CHANGES -> detectMinecraftChanges();
+            case DECOMPILER_CHANGES -> detectDecompilerChanges();
+        };
+
+        if (runRequest == null) {
+            LOGGER.info("Nothing to do.");
+            return;
+        }
+
+        var decompilerVersion = decompilerOverride
+                .or(() -> Optional.ofNullable(runRequest.decompilerVersion))
+                .orElseGet(decompiler::findLatest);
+
+        JobMatrix matrix = new JobMatrix(prepareRequestedVersions(runRequest.versions)
+                .partition(size)
+                .map(e -> new MatrixJob(
+                        "job",
+                        new MatrixJobConfig(e
+                                .map(e2 -> new MatrixJobConfig.JobVersion(e2.manifest.id(), e2.commitName()))
+                                .toList(),
+                                decompilerVersion
+                        )
+                ))
+                .toList()
+        );
+
+        LOGGER.info("Writing job matrix.");
+        JsonUtils.write(GSON_MINIFIED, matrixOutput, matrix);
+
+        // Only push cache here.
+        GitTasks.checkoutOrCreateBranch(git, "main");
+        pushCache();
+        GitTasks.stageAndCommit(git, runRequest.reason);
+        GitTasks.createTag(git, "temp/main");
+
+        if (shouldPush) {
+            GitTasks.pushAllTags(git);
+        }
+    }
+
+    private void runUseMatrix(Path matrixInput) throws IOException {
+        MatrixJobConfig config = JsonUtils.parse(GSON, matrixInput, MatrixJobConfig.class);
+
+        fastForwardMainToTempTag();
+        pullCache();
+
+        var toProcess = prepareRequestedMatrixVersions(FastStream.of(config.versions))
+                .toList();
+        fastRemapper.resolveWithVersion("0.3.2.18");
+        decompiler.resolveWithVersion(config.decompilerVersion);
+        LOGGER.info("Found {} versions to process.", toProcess.size());
+        int i = 0;
+        for (var version : toProcess) {
+            var manifest = version.manifest;
+            LOGGER.info("Processing version {} {}/{}", manifest.id(), ++i, toProcess.size());
+            GitTasks.checkoutOrCreateBranch(git, branchNameForVersion(manifest));
+            GitTasks.removeAllFiles(repoDir);
+
+            processVersion(manifest);
+
+            GitTasks.stageAndCommit(git, version.commitName);
+            GitTasks.createTag(git, "temp/" + branchNameForVersion(manifest));
+        }
+        if (shouldPush) {
+            GitTasks.pushAllTags(git);
+        }
+    }
+
+    private void runFinalizeMatrix(Path matrixInput) throws IOException {
+        JobMatrix config = JsonUtils.parse(GSON, matrixInput, JobMatrix.class);
+
+        fastForwardMainToTempTag();
+        pullCache();
+
+        preTestStats.putAll(pullStatsFromBranches());
+
+        List<String> tagsToDelete = new ArrayList<>();
+        tagsToDelete.add("temp/main");
+        var toProcess = prepareRequestedMatrixVersions(FastStream.of(config.jobs).flatMap(e -> e.parseConfig().versions))
+                .toList();
+        var allTags = FastStream.of(GitTasks.listAllTags(git))
+                .toMap(GitTasks.TagEntry::name, GitTasks.TagEntry::commit);
+        for (var version : toProcess) {
+            var branchName = branchNameForVersion(version.manifest);
+            var tagName = "temp/" + branchName;
+            var tagCommit = allTags.get(tagName);
+            if (tagCommit == null) {
+                throw new RuntimeException("Tag " + tagName + " did not get created and pushed.");
+            }
+            GitTasks.fastForwardBranchToCommit(git, branchName, tagCommit);
+            commitTitles.put(version.manifest.id(), version.commitName);
+            tagsToDelete.add(tagName);
+        }
+
+        testStats.putAll(pullStatsFromBranches());
+
+        GitTasks.checkoutOrCreateBranch(git, "main");
+        rebuildMain();
+        GitTasks.stageAndAmend(git);
+
+        GitTasks.deleteTags(git, tagsToDelete);
+
+        if (shouldPush) {
+            // TODO we should also perhaps do a git gc. I imagine the ref reuse will be quite poor.
+            GitTasks.pushAllBranches(git);
+            GitTasks.pushDeleteTags(git, tagsToDelete);
+        }
+
+        String webhook = System.getenv("DISCORD_WEBHOOK");
+        if (webhook != null) {
+            DiscordReportTask.generateReports(this, webhook, preTestStats, testStats, commitTitles);
+        }
+    }
+
+    private void fastForwardMainToTempTag() {
+        var tag = FastStream.of(GitTasks.listAllTags(git))
+                .filter(e -> e.name().equals("temp/main"))
+                .onlyOrDefault();
+        if (tag == null) throw new RuntimeException("No temp/main tag");
+
+        GitTasks.fastForwardBranchToCommit(git, "main", tag.commit());
+    }
+
+    private Map<String, CommittedTestCaseDef> pullStatsFromBranches() throws IOException {
         var branches = GitTasks.listAllBranches(git);
+        Map<String, CommittedTestCaseDef> defs = new HashMap<>();
         for (var entry : branches) {
             String name = entry.name();
             if (!name.startsWith("release/") && !name.startsWith("snapshot/")) continue;
 
             String id = name.replace("release/", "").replace("snapshot/", "");
             GitTasks.loadBlob(git, entry.commit() + ":src/main/resources/test_stats.json", stream -> {
-                preTestStats.put(
+                defs.put(
                         id,
                         new CommittedTestCaseDef(entry.commit(), TestCaseDef.loadTestStats(stream))
                 );
             });
         }
+        return defs;
     }
 
     private @Nullable RunRequest detectAutomaticChanges() throws IOException {
@@ -331,12 +516,20 @@ public class SnowShovel implements AutoCloseable {
 
     }
 
-    private void processVersion(Git git, VersionManifest manifest, String commitName) throws IOException {
-        // Checkout or create a branch for this version.
-        // We then immediately delete all files except the .git folder, because we are lazy :)
-        GitTasks.checkoutOrCreateBranch(git, branchNameForVersion(manifest));
-        GitTasks.removeAllFiles(repoDir);
+    private FastStream<ProcessableVersion> prepareRequestedMatrixVersions(FastStream<MatrixJobConfig.JobVersion> jobVersions) throws IOException {
+        Map<String, String> idToCommit = jobVersions
+                .toMap(MatrixJobConfig.JobVersion::id, e -> e.commitName);
 
+        var manifestsStream = VersionManifestTasks.getManifests(
+                this,
+                FastStream.of(VersionManifestTasks.allVersions(this))
+                        .filter(e -> idToCommit.containsKey(e.id()))
+        );
+        return manifestsStream
+                .map(e -> new ProcessableVersion(e, idToCommit.get(e.id())));
+    }
+
+    private @Nullable TestCaseDef processVersion(VersionManifest manifest) throws IOException {
         // Download the client jar and client mappings proguard log.
         var clientJarFuture = manifest.requireDownloadAsync(http, versionsDir, "client", "jar");
         var clientMappingsFuture = manifest.requireDownloadAsync(http, versionsDir, "client_mappings", "mojmap");
@@ -372,12 +565,7 @@ public class SnowShovel implements AutoCloseable {
         }
         // Generate Gradle project and misc files/reports, then commit the results.
         ProjectTasks.generateProjectFiles(this, javaVersion, libraries, manifest.id(), stats);
-        var commit = GitTasks.stageAndCommit(git, commitName);
-
-        if (stats != null) {
-            testStats.put(manifest.id(), new CommittedTestCaseDef(commit, stats));
-        }
-        commitTitles.put(manifest.id(), commitName);
+        return stats;
     }
 
     private void pullCache() throws IOException {
@@ -394,6 +582,12 @@ public class SnowShovel implements AutoCloseable {
         }
     }
 
+    private void rebuildMain() throws IOException {
+        pushCache();
+        emitMainGitignore();
+        emitMainReadme();
+    }
+
     private void pushCache() throws IOException {
         var dataJson = cacheDir.resolve("versions.json");
         JsonUtils.write(GSON, dataJson, this.data, MAP_STRING_TYPE, StandardCharsets.UTF_8);
@@ -401,19 +595,6 @@ public class SnowShovel implements AutoCloseable {
         var repoCacheDir = repoDir.resolve("cache");
         if (Files.exists(cacheDir)) {
             Files.walkFileTree(cacheDir, new CopyingFileVisitor(cacheDir, repoCacheDir));
-        }
-    }
-
-    private void commitAndPushToMain(RunRequest runRequest) throws IOException {
-        GitTasks.checkoutOrCreateBranch(git, "main");
-        pushCache();
-        emitMainGitignore();
-        emitMainReadme();
-
-        GitTasks.stageAndCommit(git, runRequest.reason);
-
-        if (shouldPush) {
-            GitTasks.pushAllBranches(git);
         }
     }
 
@@ -480,4 +661,28 @@ public class SnowShovel implements AutoCloseable {
             VersionManifest manifest,
             String commitName
     ) { }
+
+    public record JobMatrix(List<MatrixJob> jobs) { }
+
+    public record MatrixJob(
+            String name,
+            String config
+    ) {
+
+        public MatrixJob(String name, MatrixJobConfig config) {
+            this(name, GSON_MINIFIED.toJson(config));
+        }
+
+        public MatrixJobConfig parseConfig() {
+            return GSON.fromJson(config(), MatrixJobConfig.class);
+        }
+    }
+
+    public record MatrixJobConfig(
+            List<JobVersion> versions,
+            String decompilerVersion
+    ) {
+
+        public record JobVersion(String id, String commitName) { }
+    }
 }
