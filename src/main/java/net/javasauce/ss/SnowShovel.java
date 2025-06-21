@@ -274,7 +274,6 @@ public class SnowShovel implements AutoCloseable {
         data.put(TAG_SNOW_SHOVEL_VERSION, VERSION);
         data.put(TAG_DECOMPILER_VERSION, decompilerVersion);
 
-
         GitTasks.checkoutOrCreateBranch(git, "main");
         rebuildMain();
         GitTasks.stageAndCommit(git, runRequest.reason);
@@ -388,6 +387,9 @@ public class SnowShovel implements AutoCloseable {
         }
 
         testStats.putAll(pullStatsFromBranches());
+
+        data.put(TAG_SNOW_SHOVEL_VERSION, VERSION);
+        data.put(TAG_DECOMPILER_VERSION, config.jobs.getFirst().parseConfig().decompilerVersion);
 
         GitTasks.checkoutOrCreateBranch(git, "main");
         rebuildMain();
