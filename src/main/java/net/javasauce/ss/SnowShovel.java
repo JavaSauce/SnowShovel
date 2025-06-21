@@ -70,7 +70,7 @@ public class SnowShovel implements AutoCloseable {
         var finalizeMatrixBuilder = parser.accepts("finalize-matrix", "Finalize a matrix run.");
 
         var modeOpt = parser.accepts("mode", "Set the mode to run in. Usually AUTO unless testing.")
-                .requiredUnless(runMatrixBuilder, finalizeMatrixBuilder)
+                .availableUnless(runMatrixBuilder, finalizeMatrixBuilder)
                 .withRequiredArg()
                 .withValuesConvertedBy(new EnumConverter<>(Mode.class) { })
                 .defaultsTo(Mode.AUTO);
@@ -87,12 +87,12 @@ public class SnowShovel implements AutoCloseable {
                 .defaultsTo(8);
 
         var useMatrixOpt = runMatrixBuilder
-                .availableUnless(modeOpt)
+                .availableUnless(modeOpt, finalizeMatrixBuilder)
                 .withRequiredArg()
                 .withValuesConvertedBy(new PathConverter(PathProperties.FILE_EXISTING));
 
         var finalizeMatrixOpt = finalizeMatrixBuilder
-                .availableUnless(modeOpt)
+                .availableUnless(modeOpt, runMatrixBuilder)
                 .withRequiredArg()
                 .withValuesConvertedBy(new PathConverter(PathProperties.FILE_EXISTING));
 
