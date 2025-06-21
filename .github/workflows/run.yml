@@ -46,7 +46,7 @@ jobs:
         run: |
           echo '${{ matrix.jobs.config }}' > matrix-segment.json
           aws s3 sync --no-progress s3://snow-shovel-cache/libraries ./libraries
-          includes="$(cat matrix-segment.json | jq -r '[.versions.[].id | "--include \(.)/*"] | join(" ")')"
+            includes=$(jq -r '[.versions[].id | "--include \(. )/*"] | join(" ")' matrix-segment.json)
           aws s3 sync --no-progress --exclude "*" $includes s3://snow-shovel-cache/versions ./versions
       - name: ${{ matrix.jobs.name }}
         env:
