@@ -44,16 +44,16 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
-          echo '${{ matrix.job.config }}' > matrix-segment.json
+          echo '${{ matrix.jobs.config }}' > matrix-segment.json
           aws s3 sync --no-progress s3://snow-shovel-cache/libraries ./libraries
           includes="$(cat matrix-segment.json | jq -r '[.versions.[].id | "--include \(.)/*"] | join(" ")')"
           aws s3 sync --no-progress --exclude "*" $includes s3://snow-shovel-cache/versions ./versions
-      - name: ${{ matrix.job.name }}
+      - name: ${{ matrix.jobs.name }}
         env:
           GIT_USER: JavaSauce
           GIT_PASS: ${{ secrets.GIT_PASS }}
         run: |
-          echo '${{ matrix.job.config }}' > matrix-segment.json
+          echo '${{ matrix.jobs.config }}' > matrix-segment.json
           .github/scripts/run.sh --gitRepo https://github.com/JavaSauce/Shoveled --gitClean --gitPush --run-matrix matrix-segment.json
       - name: Push cache
         if: always()
