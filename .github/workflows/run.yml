@@ -24,7 +24,7 @@ jobs:
           GIT_USER: JavaSauce
           GIT_PASS: ${{ secrets.GIT_PASS }}
         run: |
-          .github/scripts/run.sh --mode AUTO --gitRepo https://github.com/JavaSauce/Shoveled --gen-matrix ./matrix.json
+          .github/scripts/run.sh --mode AUTO --gitRepo https://github.com/JavaSauce/Shoveled --gitClean --gitPush --gen-matrix ./matrix.json
           echo "work=$(jq -c . matrix.json)" | tee $GITHUB_OUTPUT
   process_versions:
     runs-on: self-hosted
