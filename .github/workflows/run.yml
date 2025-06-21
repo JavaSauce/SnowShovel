@@ -45,7 +45,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           aws s3 sync --no-progress s3://snow-shovel-cache/libraries ./libraries
-          includes="$(echo ${{ matrix.job.config }} | jq -r '[.versions.[].id | "--include \(.)/*"] | join(" ")')"
+          includes="$(echo \"${{ matrix.job.config }}\" | jq -r '[.versions.[].id | "--include \(.)/*"] | join(" ")')"
           aws s3 sync --no-progress --exclude "*" $includes s3://snow-shovel-cache/versions ./versions
       - name: ${{ matrix.job.name }}
         env:
