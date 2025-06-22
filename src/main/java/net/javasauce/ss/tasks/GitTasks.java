@@ -93,8 +93,6 @@ public class GitTasks {
 
     public static boolean checkoutOrCreateBranch(Git git, String branch) {
         try {
-            if (git.getRepository().getBranch().equals(branch)) return false;
-
             if (git.getRepository().findRef(Constants.R_HEADS + branch) != null) {
                 LOGGER.info("Checking out existing branch {}", branch);
                 git.checkout()
