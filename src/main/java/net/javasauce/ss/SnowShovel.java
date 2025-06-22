@@ -578,6 +578,7 @@ public class SnowShovel implements AutoCloseable {
 
         var repoCacheDir = repoDir.resolve("cache");
         if (Files.exists(repoCacheDir)) {
+            LOGGER.info("Pulling cache from repo.");
             Files.walkFileTree(repoCacheDir, new CopyingFileVisitor(repoCacheDir, cacheDir));
         }
 
