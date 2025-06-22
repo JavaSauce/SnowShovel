@@ -17,7 +17,6 @@ import net.covers1624.quack.gson.JsonUtils;
 import net.covers1624.quack.io.CopyingFileVisitor;
 import net.covers1624.quack.maven.MavenNotation;
 import net.covers1624.quack.net.httpapi.HttpEngine;
-import net.covers1624.quack.util.SneakyUtils;
 import net.javasauce.ss.tasks.*;
 import net.javasauce.ss.tasks.report.DiscordReportTask;
 import net.javasauce.ss.tasks.report.GenerateReportTask;
@@ -305,7 +304,10 @@ public class SnowShovel implements AutoCloseable {
                 .or(() -> Optional.ofNullable(runRequest.decompilerVersion))
                 .orElseGet(decompiler::findLatest);
 
-        JobMatrix matrix = new JobMatrix(prepareRequestedVersions(runRequest.versions)
+        var prepared = prepareRequestedVersions(runRequest.versions)
+                .toList();
+        LOGGER.info("{} versions to process.", prepared.size());
+        JobMatrix matrix = new JobMatrix(FastStream.of(prepared)
                 .partition(size)
                 .map(e -> new MatrixJob(
                         "job",
@@ -571,6 +573,7 @@ public class SnowShovel implements AutoCloseable {
     }
 
     private void pullCache() throws IOException {
+        LOGGER.info("Pulling caches from checked out repo.");
         if (Files.exists(cacheDir)) Files.walkFileTree(cacheDir, new DeleteHierarchyVisitor());
 
         var repoCacheDir = repoDir.resolve("cache");
@@ -580,7 +583,9 @@ public class SnowShovel implements AutoCloseable {
 
         var dataJson = cacheDir.resolve("versions.json");
         if (Files.exists(dataJson)) {
+            LOGGER.info("Reading data json cache from {}", dataJson);
             data.putAll(JsonUtils.parse(GSON, dataJson, MAP_STRING_TYPE, StandardCharsets.UTF_8));
+            LOGGER.info("Got {}", data);
         }
     }
 
