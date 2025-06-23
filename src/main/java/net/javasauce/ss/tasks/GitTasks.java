@@ -257,6 +257,7 @@ public class GitTasks {
         try {
             git.push()
                     .setRemote("origin")
+                    .setForce(true)
                     .setPushTags()
                     .setProgressMonitor(new TextProgressMonitor())
                     .call();
@@ -270,6 +271,7 @@ public class GitTasks {
         try {
             git.push()
                     .setRemote("origin")
+                    .setForce(true)
                     .setRefSpecs(FastStream.of(tags)
                             .map(e -> new RefSpec(":refs/tags" + e))
                             .toList()
