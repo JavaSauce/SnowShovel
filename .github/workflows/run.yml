@@ -13,11 +13,11 @@ jobs:
       matrix: ${{ steps.split_work.outputs.work }}
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Java 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: 21
-          distribution: 'temurin'
+#      - name: Setup Java 21
+#        uses: actions/setup-java@v4
+#        with:
+#          java-version: 21
+#          distribution: 'temurin'
       - name: Split work
         id: split_work
         env:
@@ -33,11 +33,11 @@ jobs:
       matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Java 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: 21
-          distribution: 'temurin'
+#      - name: Setup Java 21
+#        uses: actions/setup-java@v4
+#        with:
+#          java-version: 21
+#          distribution: 'temurin'
       - name: Pull cache
         env:
           AWS_ENDPOINT_URL: ${{ secrets.AWS_ENDPOINT_URL }}
@@ -69,11 +69,11 @@ jobs:
     needs: [ discover, process_versions ]
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Java 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: 21
-          distribution: 'temurin'
+#      - name: Setup Java 21
+#        uses: actions/setup-java@v4
+#        with:
+#          java-version: 21
+#          distribution: 'temurin'
       - name: Run
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
