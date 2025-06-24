@@ -2,6 +2,7 @@ package net.javasauce.ss.util;
 
 import net.covers1624.quack.maven.MavenNotation;
 import net.javasauce.ss.SnowShovel;
+import net.javasauce.ss.tasks.DownloadTask;
 import net.javasauce.ss.tasks.DownloadTasks;
 import net.javasauce.ss.tasks.ToolTasks;
 import org.jetbrains.annotations.Nullable;
@@ -49,7 +50,8 @@ public final class ToolProvider {
         if (toolFuture != null) throw new IllegalStateException("Already resolved.");
 
         notation = baseNotation.withVersion(version);
-        toolFuture = DownloadTasks.downloadMavenArtifactAsync(ss.http, MAVEN, notation, ss.toolsDir);
+        toolFuture = DownloadTask.forMaven(ss.toolsDir, MAVEN, notation)
+                .executeAsync(ss.http);
         if (requiresExtracting) {
             toolFuture = toolFuture.thenApplyAsync(e -> ToolTasks.extractTool(ss.toolsDir, notation, e, !version.contains("SNAPSHOT")));
         }

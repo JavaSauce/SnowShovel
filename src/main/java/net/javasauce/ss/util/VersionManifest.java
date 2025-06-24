@@ -11,7 +11,7 @@ import net.covers1624.quack.gson.LowerCaseEnumAdapterFactory;
 import net.covers1624.quack.gson.MavenNotationAdapter;
 import net.covers1624.quack.maven.MavenNotation;
 import net.covers1624.quack.net.httpapi.HttpEngine;
-import net.javasauce.ss.tasks.DownloadTasks;
+import net.javasauce.ss.tasks.DownloadTask;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
@@ -60,9 +60,10 @@ public record VersionManifest(
     }
 
     public static VersionManifest update(HttpEngine http, Path versionsDir, VersionListManifest.Version version) throws IOException {
-        Path file = versionsDir.resolve(version.id() + "/" + version.id() + ".json");
-        DownloadTasks.downloadFile(http, version.url(), file, -1, version.sha1());
-        JsonPretty.prettyPrintJsonFile(file); // I don't like doing this always, but very meh.
+        var file = DownloadTask.of(versionsDir.resolve(version.id() + "/" + version.id() + ".json"), version.url())
+                .withDownloadHash(version.sha1())
+                .withMutator(JsonPretty::prettyPrintJsonFile)
+                .execute(http);
         return JsonUtils.parse(GSON, file, VersionManifest.class);
     }
 
@@ -71,8 +72,10 @@ public record VersionManifest(
         if (download == null) throw new RuntimeException("Missing download " + downloadName);
 
         Path file = versionsDir.resolve(id() + "/" + id() + "-" + downloadName + "." + fileExtension);
-        DownloadTasks.downloadFile(http, download.url(), file, download.size(), download.sha1());
-        return file;
+        return DownloadTask.of(file, download.url())
+                .withDownloadLen(download.size())
+                .withDownloadHash(download.sha1())
+                .execute(http);
     }
 
     public CompletableFuture<Path> requireDownloadAsync(HttpEngine http, Path versionsDir, String downloadName, String fileExtension) {

@@ -3,7 +3,6 @@ package net.javasauce.ss.tasks;
 import net.covers1624.jdkutils.JavaVersion;
 import net.covers1624.quack.io.IOUtils;
 import net.covers1624.quack.io.IndentPrintWriter;
-import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.SnowShovel;
 import net.javasauce.ss.tasks.LibraryTasks.LibraryDownload;
 import net.javasauce.ss.tasks.report.GenerateReportTask;
@@ -16,7 +15,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Created by covers1624 on 1/21/25.
@@ -36,13 +34,10 @@ public class ProjectTasks {
         emitSettingsGradle(ss.repoDir);
         emitGitIgnore(ss.repoDir);
         emitReadme(ss.repoDir, mcVersion, testStats);
-        var zip = DownloadTasks.downloadFile(
-                ss.http,
-                GRADLE_WRAPPER_DIST,
-                ss.librariesDir.resolve("GradleWrapper.zip"),
-                GRADLE_WRAPPER_DIST_LEN,
-                GRADLE_WRAPPER_DIST_HASH
-        );
+        var zip = DownloadTask.of(ss.librariesDir.resolve("GradleWrapper.zip"), GRADLE_WRAPPER_DIST)
+                .withDownloadLen(GRADLE_WRAPPER_DIST_LEN)
+                .withDownloadHash(GRADLE_WRAPPER_DIST_HASH)
+                .execute(ss.http);
         ZipTasks.extractZip(zip, ss.repoDir);
     }
 

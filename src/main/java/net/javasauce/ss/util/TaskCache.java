@@ -1,6 +1,7 @@
 package net.javasauce.ss.util;
 
 import net.covers1624.quack.util.SneakyUtils;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -36,6 +37,20 @@ public class TaskCache {
 
     public TaskCache add(CharSequence str) {
         entries.add(e -> Hashing.addUTFBytes(e, str.toString()));
+        return this;
+    }
+
+    public TaskCache add(Number num) {
+        entries.add(e -> Hashing.addUTFBytes(e, num.toString()));
+        return this;
+    }
+
+    public TaskCache addNullable(@Nullable CharSequence str) {
+        entries.add(e -> {
+            if (str != null) {
+                Hashing.addUTFBytes(e, str.toString());
+            }
+        });
         return this;
     }
 

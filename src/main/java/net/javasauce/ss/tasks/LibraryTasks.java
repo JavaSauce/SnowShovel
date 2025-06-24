@@ -25,7 +25,11 @@ public class LibraryTasks {
 
     public static void downloadLibraries(HttpEngine http, Iterable<LibraryDownload> downloads) {
         List<CompletableFuture<Path>> downloadFutures = FastStream.of(downloads)
-                .map(e -> DownloadTasks.downloadFileAsync(http, e.url, e.path, e.size, e.sha1))
+                .map(e -> DownloadTask.of(e.path(), e.url())
+                        .withDownloadLen(e.size())
+                        .withDownloadHash(e.sha1())
+                        .executeAsync(http)
+                )
                 .toList();
         CompletableFuture.allOf(downloadFutures.toArray(CompletableFuture[]::new))
                 .join();
