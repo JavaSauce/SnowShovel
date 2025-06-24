@@ -22,7 +22,11 @@ public class TaskCache {
     }
 
     public static TaskCache forOutput(Path outputPath) {
-        return new TaskCache(outputPath.resolveSibling(outputPath.getFileName() + ".sha1"));
+        return forOutput(outputPath, "");
+    }
+
+    public static TaskCache forOutput(Path outputPath, String suffix) {
+        return new TaskCache(outputPath.resolveSibling(outputPath.getFileName() + suffix + ".sha1"));
     }
 
     public TaskCache add(Path file) {
