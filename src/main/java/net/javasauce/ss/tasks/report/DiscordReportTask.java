@@ -26,7 +26,14 @@ public class DiscordReportTask {
     private static final String GS = "\uD83D\uDFE9";
     private static final String RS = "\uD83D\uDFE5";
 
-    public static void generateReports(SnowShovel ss, String webhook, Map<String, CommittedTestCaseDef> preTestStats, Map<String, CommittedTestCaseDef> postTestStats, Map<String, String> commitTitles) throws IOException {
+    public static void generateReports(SnowShovel ss,
+            String webhook,
+            Map<String, CommittedTestCaseDef> preTestStats,
+            Map<String, CommittedTestCaseDef> postTestStats,
+            Map<String, String> commitTitles,
+            int numberProcessed,
+            String runReason
+    ) throws IOException {
         LOGGER.info("Building Discord reports.");
         var order = FastStream.of(VersionManifestTasks.allVersions(ss))
                 .map(VersionListManifest.Version::id)
@@ -70,6 +77,13 @@ public class DiscordReportTask {
             } catch (InterruptedException ignored) {
             }
         }
+
+        new DiscordWebhook(webhook)
+                .addEmbed(new DiscordWebhook.Embed()
+                        .setTitle("SnowShovel run finished.")
+                        .setDescription(runReason + "\n" + "Updated `" + numberProcessed + "` versions.")
+                )
+                .execute(ss.http);
     }
 
     private static DiscordWebhook.Embed buildNewEmbed(SnowShovel ss, String mcVersion, CommittedTestCaseDef def, @Nullable String commitTitle) {

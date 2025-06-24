@@ -186,6 +186,15 @@ public class GitTasks {
         }
     }
 
+    public static String getCommitMessage(Git git, String ref) {
+        var repo = git.getRepository();
+        try (RevWalk walk = new RevWalk(repo)) {
+            return walk.parseCommit(repo.resolve(ref)).getFullMessage();
+        } catch (IOException ex) {
+            throw new RuntimeException("Failed to get commit message of ref.", ex);
+        }
+    }
+
     public static String stageAndAmend(Git git) {
         LOGGER.info("Amending changes.");
         stageChanges(git);
@@ -193,10 +202,10 @@ public class GitTasks {
         try (RevWalk walk = new RevWalk(repo)) {
             var rev = git.commit()
                     .setAmend(true)
-                    .setMessage(walk.parseCommit(repo.resolve(Constants.HEAD)).getFullMessage())
+                    .setMessage(getCommitMessage(git, Constants.HEAD))
                     .call();
             return rev.getId().getName();
-        } catch (GitAPIException | IOException ex) {
+        } catch (GitAPIException ex) {
             throw new RuntimeException("Failed to amend changes.", ex);
         }
     }

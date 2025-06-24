@@ -24,6 +24,7 @@ import net.javasauce.ss.tasks.report.TestCaseDef;
 import net.javasauce.ss.util.*;
 import org.apache.commons.io.FilenameUtils;
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.transport.CredentialsProvider;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.jetbrains.annotations.Nullable;
@@ -283,7 +284,7 @@ public class SnowShovel implements AutoCloseable {
 
         String webhook = System.getenv("DISCORD_WEBHOOK");
         if (webhook != null) {
-            DiscordReportTask.generateReports(this, webhook, preTestStats, testStats, commitTitles);
+            DiscordReportTask.generateReports(this, webhook, preTestStats, testStats, commitTitles, toProcess.size(), runRequest.reason);
         }
     }
 
@@ -407,7 +408,15 @@ public class SnowShovel implements AutoCloseable {
 
         String webhook = System.getenv("DISCORD_WEBHOOK");
         if (webhook != null) {
-            DiscordReportTask.generateReports(this, webhook, preTestStats, testStats, commitTitles);
+            DiscordReportTask.generateReports(
+                    this,
+                    webhook,
+                    preTestStats,
+                    testStats,
+                    commitTitles,
+                    toProcess.size(),
+                    GitTasks.getCommitMessage(git, Constants.HEAD)
+            );
         }
     }
 
