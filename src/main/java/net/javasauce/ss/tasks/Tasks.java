@@ -9,13 +9,6 @@ import java.io.IOException;
  */
 public class Tasks {
 
-    public static void doWithRetry(int retries, SneakyUtils.ThrowingRunnable<IOException> r) {
-        getWithRetry(retries, () -> {
-            r.run();
-            return null;
-        });
-    }
-
     public static <T> T getWithRetry(int retries, SneakyUtils.ThrowingSupplier<T, IOException> r) {
         if (retries == 0) throw new IllegalArgumentException("Need more than 0 retries.");
 

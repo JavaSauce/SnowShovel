@@ -33,6 +33,12 @@ public class Hashing {
         digest.update(str.getBytes(StandardCharsets.UTF_8));
     }
 
+    public static void tryAddFileBytes(MessageDigest digest, Path file) throws IOException {
+        if (Files.exists(file)) {
+            addFileBytes(digest, file);
+        }
+    }
+
     public static void addFileBytes(MessageDigest digest, Path file) throws IOException {
         try (InputStream is = Files.newInputStream(file)) {
             addStreamBytes(digest, is);
