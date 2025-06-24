@@ -368,7 +368,7 @@ public class SnowShovel implements AutoCloseable {
         fastForwardMainToTempTag();
         pullCache();
 
-        preTestStats.putAll(pullStatsFromBranches());
+        preTestStats.putAll(pullStatsFromBranches("origin/"));
 
         List<String> tagsToDelete = new ArrayList<>();
         tagsToDelete.add("temp/main");
@@ -421,10 +421,21 @@ public class SnowShovel implements AutoCloseable {
     }
 
     private Map<String, CommittedTestCaseDef> pullStatsFromBranches() throws IOException {
+        return pullStatsFromBranches("");
+    }
+
+    private Map<String, CommittedTestCaseDef> pullStatsFromBranches(String prefix) throws IOException {
+        if (!prefix.isEmpty() && !prefix.endsWith("/")) {
+            prefix += "/";
+        }
         var branches = GitTasks.listAllBranches(git);
         Map<String, CommittedTestCaseDef> defs = new HashMap<>();
         for (var entry : branches) {
             String name = entry.name();
+            if (!prefix.isEmpty()) {
+                if (!name.startsWith(prefix)) continue;
+                name = name.substring(prefix.length());
+            }
             if (!name.startsWith("release/") && !name.startsWith("snapshot/")) continue;
 
             String id = name.replace("release/", "").replace("snapshot/", "");
