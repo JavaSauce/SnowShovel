@@ -230,7 +230,7 @@ public class SnowShovel implements AutoCloseable {
     }
 
     private void run(Mode mode) throws IOException {
-        testStats.putAll(pullStatsFromBranches());
+        preTestStats.putAll(pullStatsFromBranches());
         testStats.putAll(preTestStats);
 
         var runRequest = switch (mode) {
