@@ -368,7 +368,7 @@ public class SnowShovel implements AutoCloseable {
         fastForwardMainToTempTag();
         pullCache();
 
-        preTestStats.putAll(pullStatsFromBranches("origin/"));
+        preTestStats.putAll(pullStatsFromBranches(true));
 
         List<String> tagsToDelete = new ArrayList<>();
         tagsToDelete.add("temp/main");
@@ -421,32 +421,36 @@ public class SnowShovel implements AutoCloseable {
     }
 
     private Map<String, CommittedTestCaseDef> pullStatsFromBranches() throws IOException {
-        return pullStatsFromBranches("");
+        return pullStatsFromBranches(false);
     }
 
-    private Map<String, CommittedTestCaseDef> pullStatsFromBranches(String prefix) throws IOException {
-        if (!prefix.isEmpty() && !prefix.endsWith("/")) {
-            prefix += "/";
-        }
+    private Map<String, CommittedTestCaseDef> pullStatsFromBranches(boolean tryOrigin) throws IOException {
         var branches = GitTasks.listAllBranches(git);
-        Map<String, CommittedTestCaseDef> defs = new HashMap<>();
-        for (var entry : branches) {
-            String name = entry.name();
-            if (!prefix.isEmpty()) {
-                if (!name.startsWith(prefix)) continue;
-                name = name.substring(prefix.length());
-            }
-            if (!name.startsWith("release/") && !name.startsWith("snapshot/")) continue;
 
-            String id = name.replace("release/", "").replace("snapshot/", "");
-            GitTasks.loadBlob(git, entry.commit() + ":src/main/resources/test_stats.json", stream -> {
+        Map<String, String> idToCommit = new HashMap<>();
+        if (tryOrigin) {
+            FastStream.of(branches)
+                    .filter(e -> e.name().startsWith("origin/"))
+                    .forEach(e -> parseBranchToId(e.name().replace("origin/", ""), e.commit(), idToCommit));
+        }
+        FastStream.of(branches)
+                .forEach(e -> parseBranchToId(e.name(), e.commit(), idToCommit));
+        Map<String, CommittedTestCaseDef> defs = new HashMap<>();
+        for (var entry : idToCommit.entrySet()) {
+            GitTasks.loadBlob(git, entry.getValue() + ":src/main/resources/test_stats.json", stream -> {
                 defs.put(
-                        id,
-                        new CommittedTestCaseDef(entry.commit(), TestCaseDef.loadTestStats(stream))
+                        entry.getKey(),
+                        new CommittedTestCaseDef(entry.getValue(), TestCaseDef.loadTestStats(stream))
                 );
             });
         }
         return defs;
+    }
+
+    private static void parseBranchToId(String branch, String commit, Map<String, String> idToCommit) {
+        if (branch.startsWith("release/") || branch.startsWith("snapshot/")) {
+            idToCommit.put(branch.replace("release/", "").replace("snapshot/", ""), commit);
+        }
     }
 
     private @Nullable RunRequest detectAutomaticChanges() throws IOException {
