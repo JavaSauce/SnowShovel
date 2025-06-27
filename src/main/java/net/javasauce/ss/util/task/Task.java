@@ -117,8 +117,8 @@ public abstract class Task {
      * @param name The name for your input. Used in logging/errors.
      * @return A new input for your task.
      */
-    protected final <T> TaskInput.Optional<T> optionalInput(String name) {
-        var input = new TaskInput.Optional<T>(this, name);
+    protected final <T> TaskInput<Optional<T>> optionalInput(String name) {
+        var input = new TaskInput<Optional<T>>(this, name);
         input.set(Optional.empty());
         inputs.add(input);
         return input;

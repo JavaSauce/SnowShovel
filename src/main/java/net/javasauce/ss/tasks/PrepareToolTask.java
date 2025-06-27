@@ -12,6 +12,7 @@ import org.jetbrains.annotations.Nullable;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 import java.util.zip.ZipEntry;
@@ -24,7 +25,7 @@ import static java.util.Objects.requireNonNull;
  */
 public class PrepareToolTask extends Task {
 
-    public final TaskInput.Optional<JavaVersion> javaVersion = optionalInput("javaVersion");
+    public final TaskInput<Optional<JavaVersion>> javaVersion = optionalInput("javaVersion");
     public final TaskInput<MavenNotation> notation = input("notation");
     public final TaskInput<Path> tool = input("tool");
     public final TaskInput<Path> toolDir = input("toolDir");

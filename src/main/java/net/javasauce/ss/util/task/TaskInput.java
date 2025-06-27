@@ -1,7 +1,6 @@
 package net.javasauce.ss.util.task;
 
 import net.covers1624.quack.collection.FastStream;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -11,7 +10,7 @@ import java.util.concurrent.CompletableFuture;
  * <p>
  * Created by covers1624 on 6/26/25.
  */
-public sealed class TaskInput<T> extends TaskIO<T> permits TaskInput.Optional, TaskInput.Collection {
+public sealed class TaskInput<T> extends TaskIO<T> permits TaskInput.Collection {
 
     TaskInput(Task task, String name) {
         super(task, name);
@@ -27,28 +26,6 @@ public sealed class TaskInput<T> extends TaskIO<T> permits TaskInput.Optional, T
      */
     public void set(TaskOutput<T> output) {
         set(output::getFuture, List.of(output.getTask()));
-    }
-
-    /**
-     * An optional task input, wrapping a java Optional.
-     */
-    // TODO we already require that the user use `setOptional` to provide a nullable value,
-    //  we should probably just yeet this and only provide the helper in Task, the user will
-    //  have to provide `Optional.ofNullable()` to the set method themselves.
-    public static final class Optional<T> extends TaskInput<java.util.Optional<T>> {
-
-        Optional(Task task, String name) {
-            super(task, name);
-        }
-
-        /**
-         * Set this IO to a nullable value.
-         *
-         * @param thing The value.
-         */
-        public void setOptional(@Nullable T thing) {
-            super.set(java.util.Optional.ofNullable(thing));
-        }
     }
 
     /**

@@ -34,9 +34,9 @@ public class NewDownloadTask extends Task {
     public final TaskOutput<Path> output = output("output");
     public final TaskInput<String> url = input("url");
 
-    public final TaskInput.Optional<Path> localOverride = optionalInput("localOverride");
+    public final TaskInput<Optional<Path>> localOverride = optionalInput("localOverride");
 
-    public final TaskInput.Optional<String> downloadHash = optionalInput("downloadHash");
+    public final TaskInput<Optional<String>> downloadHash = optionalInput("downloadHash");
     public final TaskInput<Long> downloadLen = input("downloadLen", -1L);
 
     private final List<ThrowingConsumer<Path, IOException>> mutators = new ArrayList<>();

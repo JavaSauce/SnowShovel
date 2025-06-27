@@ -274,7 +274,7 @@ public class SnowShovel implements AutoCloseable {
         });
 
         var prepareRemapper = PrepareToolTask.create("prepareRemapper", downloadExecutor, jdkProvider, task -> {
-            task.javaVersion.setOptional(JavaVersion.JAVA_17);
+            task.javaVersion.set(Optional.of(JavaVersion.JAVA_17));
             task.notation.set(remapperNotation);
             task.tool.set(downloadRemapper.output);
             task.toolDir.set(toolsDir);
@@ -309,7 +309,7 @@ public class SnowShovel implements AutoCloseable {
                 var download = manifest.downloads().get("client");
                 task.output.set(versionsDir.resolve(id).resolve(id + "-client.jar"));
                 task.url.set(download.url());
-                task.downloadHash.setOptional(download.sha1());
+                task.downloadHash.set(Optional.of(download.sha1()));
                 task.downloadLen.set(download.size());
             });
 
@@ -317,7 +317,7 @@ public class SnowShovel implements AutoCloseable {
                 var download = manifest.downloads().get("client_mappings");
                 task.output.set(versionsDir.resolve(id).resolve(id + "-client_mappings.jar"));
                 task.url.set(download.url());
-                task.downloadHash.setOptional(download.sha1());
+                task.downloadHash.set(Optional.of(download.sha1()));
                 task.downloadLen.set(download.size());
             });
 
@@ -333,7 +333,7 @@ public class SnowShovel implements AutoCloseable {
                             NewDownloadTask.create("downloadLibrary_" + library.notation(), downloadExecutor, http, task -> {
                                 task.url.set(library.url());
                                 task.output.set(library.path());
-                                task.downloadHash.setOptional(library.sha1());
+                                task.downloadHash.set(Optional.ofNullable(library.sha1()));
                                 task.downloadLen.set(library.size());
                             })))
                     .toList();
