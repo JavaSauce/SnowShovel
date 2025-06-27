@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -103,6 +104,7 @@ public class DownloadTask {
         }
 
         if (localOverride != null) {
+            Files.copy(localOverride, output, StandardCopyOption.REPLACE_EXISTING);
             if (validate(output, downloadLen, downloadHash)) {
                 LOGGER.info("Using local override for download of {}", output);
                 return output;
