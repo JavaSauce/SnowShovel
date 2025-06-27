@@ -6,7 +6,6 @@ import com.google.gson.reflect.TypeToken;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
-import joptsimple.util.EnumConverter;
 import joptsimple.util.PathConverter;
 import joptsimple.util.PathProperties;
 import net.covers1624.curl4j.CABundle;
@@ -69,14 +68,7 @@ public class SnowShovel implements AutoCloseable {
         var runMatrixBuilder = parser.accepts("run-matrix", "Run using a matrix segment.");
         var finalizeMatrixBuilder = parser.accepts("finalize-matrix", "Finalize a matrix run.");
 
-        var modeOpt = parser.accepts("mode", "Set the mode to run in. Usually AUTO unless testing.")
-                .availableUnless(runMatrixBuilder, finalizeMatrixBuilder)
-                .withRequiredArg()
-                .withValuesConvertedBy(new EnumConverter<>(Mode.class) { })
-                .defaultsTo(Mode.AUTO);
-
-        var genMatrixOpt = parser.accepts("gen-matrix", "Generate a matrix to use for the given mode.")
-                .availableIf(modeOpt)
+        var genMatrixOpt = parser.accepts("gen-matrix", "Generate a matrix for the current work.")
                 .withRequiredArg()
                 .withValuesConvertedBy(new PathConverter());
 
@@ -87,12 +79,12 @@ public class SnowShovel implements AutoCloseable {
                 .defaultsTo(8);
 
         var useMatrixOpt = runMatrixBuilder
-                .availableUnless(modeOpt, finalizeMatrixBuilder)
+                .availableUnless(finalizeMatrixBuilder)
                 .withRequiredArg()
                 .withValuesConvertedBy(new PathConverter(PathProperties.FILE_EXISTING));
 
         var finalizeMatrixOpt = finalizeMatrixBuilder
-                .availableUnless(modeOpt, runMatrixBuilder)
+                .availableUnless(runMatrixBuilder)
                 .withRequiredArg()
                 .withValuesConvertedBy(new PathConverter(PathProperties.FILE_EXISTING));
 
@@ -107,6 +99,8 @@ public class SnowShovel implements AutoCloseable {
         OptionSpec<String> versionOpt = parser.accepts("only-version", "Dev only flag. Filter the versions to process, limited to any specified by this flag.")
                 .withRequiredArg()
                 .withValuesSeparatedBy(",");
+
+        OptionSpec<Void> simulateFullRunOpt = parser.accepts("simulate-full-run", "Manually run a full decompile of all versions.");
 
         OptionSpec<String> decompilerVersionOpt = parser.accepts("set-decompiler-version", "Dev only flag. Set the decompiler version to use.")
                 .withRequiredArg();
@@ -143,10 +137,22 @@ public class SnowShovel implements AutoCloseable {
                 Optional.ofNullable(optSet.valueOf(decompilerVersionOpt)),
                 optSet.valuesOf(versionOpt)
         );
+
         try (ss) {
+            RunRequest runRequest;
+            if (optSet.has(simulateFullRunOpt)) {
+                runRequest = ss.manualAllVersionsRun();
+            } else {
+                runRequest = ss.detectAutomaticChanges();
+            }
+            if (runRequest == null) {
+                LOGGER.info("Nothing to do.");
+                return;
+            }
+
             if (optSet.has(genMatrixOpt)) {
                 ss.runGenMatrix(
-                        optSet.valueOf(modeOpt),
+                        runRequest,
                         optSet.valueOf(matrixSizeOpt),
                         optSet.valueOf(genMatrixOpt)
                 );
@@ -155,7 +161,7 @@ public class SnowShovel implements AutoCloseable {
             } else if (optSet.has(finalizeMatrixOpt)) {
                 ss.runFinalizeMatrix(optSet.valueOf(finalizeMatrixOpt));
             } else {
-                ss.run(optSet.valueOf(modeOpt));
+                ss.run(runRequest);
             }
         }
 
@@ -230,21 +236,9 @@ public class SnowShovel implements AutoCloseable {
         pullCache();
     }
 
-    private void run(Mode mode) throws IOException {
+    private void run(RunRequest runRequest) throws IOException {
         preTestStats.putAll(pullStatsFromBranches());
         testStats.putAll(preTestStats);
-
-        var runRequest = switch (mode) {
-            case AUTO -> detectAutomaticChanges();
-            case SELF_CHANGES -> detectSelfChanges();
-            case MC_CHANGES -> detectMinecraftChanges();
-            case DECOMPILER_CHANGES -> detectDecompilerChanges();
-        };
-
-        if (runRequest == null) {
-            LOGGER.info("Nothing to do.");
-            return;
-        }
 
         var toProcess = prepareRequestedVersions(runRequest.versions)
                 .toList();
@@ -288,19 +282,7 @@ public class SnowShovel implements AutoCloseable {
         }
     }
 
-    private void runGenMatrix(Mode mode, int size, Path matrixOutput) throws IOException {
-        var runRequest = switch (mode) {
-            case AUTO -> detectAutomaticChanges();
-            case SELF_CHANGES -> detectSelfChanges();
-            case MC_CHANGES -> detectMinecraftChanges();
-            case DECOMPILER_CHANGES -> detectDecompilerChanges();
-        };
-
-        if (runRequest == null) {
-            LOGGER.info("Nothing to do.");
-            return;
-        }
-
+    private void runGenMatrix(RunRequest runRequest, int size, Path matrixOutput) throws IOException {
         var decompilerVersion = decompilerOverride
                 .or(() -> Optional.ofNullable(runRequest.decompilerVersion))
                 .orElseGet(decompiler::findLatest);
@@ -460,6 +442,15 @@ public class SnowShovel implements AutoCloseable {
         if (branch.startsWith("release/") || branch.startsWith("snapshot/")) {
             idToCommit.put(branch.replace("release/", "").replace("snapshot/", ""), commit);
         }
+    }
+
+    private RunRequest manualAllVersionsRun() throws IOException {
+        LOGGER.info("Running in Manual mode. Re-processing everything.");
+        return new RunRequest(
+                "Manual run: Process all versions.",
+                null,
+                allVersions("Manual run: Process all versions.")
+        );
     }
 
     private @Nullable RunRequest detectAutomaticChanges() throws IOException {
@@ -669,13 +660,6 @@ public class SnowShovel implements AutoCloseable {
     @Override
     public void close() {
         git.close();
-    }
-
-    private enum Mode {
-        AUTO,
-        SELF_CHANGES,
-        MC_CHANGES,
-        DECOMPILER_CHANGES
     }
 
     public record RunRequest(

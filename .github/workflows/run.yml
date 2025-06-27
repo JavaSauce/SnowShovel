@@ -24,7 +24,7 @@ jobs:
           GIT_USER: JavaSauce
           GIT_PASS: ${{ secrets.GIT_PASS }}
         run: |
-          .github/scripts/run.sh --mode AUTO --gitRepo https://github.com/JavaSauce/Shoveled --gitClean --gitPush --gen-matrix ./matrix.json
+          .github/scripts/run.sh --gitRepo https://github.com/JavaSauce/Shoveled --gitClean --gitPush --gen-matrix ./matrix.json
           if [[ -f matrix.json ]]; then
             echo "work=$(jq -c . matrix.json)" | tee $GITHUB_OUTPUT
           fi
