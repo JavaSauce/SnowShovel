@@ -1,19 +1,22 @@
 package net.javasauce.ss.util.task;
 
-import java.util.List;
 import java.util.function.Function;
 
 /**
  * An output for a task.
  * <p>
+ * Task outputs may be declared as dynamic, indicating that their output is set
+ * as a result of the task being executed.
+ * <p>
  * Created by covers1624 on 6/26/25.
  */
-// TODO we need a way to declare outputs as dynamic (set as a result of task execution), in addition
-//  to outputs which are static and supplied when the test is setup.
 public final class TaskOutput<T> extends TaskIO<T> {
 
-    TaskOutput(Task task, String name) {
+    private final boolean isDynamic;
+
+    TaskOutput(Task task, String name, boolean isDynamic) {
         super(task, name);
+        this.isDynamic = isDynamic;
     }
 
     /**
@@ -25,6 +28,20 @@ public final class TaskOutput<T> extends TaskIO<T> {
      * @param func   The function to derive the output. Guaranteed to run only after the other task has executed.
      */
     public <U> void deriveFrom(TaskOutput<? extends U> output, Function<? super U, ? extends T> func) {
-        set(() -> output.getFuture().thenApply(func), List.of(output.getTask()));
+        set(() -> output.getTask().taskFuture().thenCompose(e -> output.getFuture()).thenApply(func));
+    }
+
+    /**
+     * @return If this task output is dynamic.
+     */
+    public boolean isDynamic() {
+        return isDynamic;
+    }
+
+    @Override
+    protected void validateSetPreconditions() {
+        if (!isDynamic()) {
+            super.validateSetPreconditions();
+        }
     }
 }

@@ -3,9 +3,6 @@ package net.javasauce.ss.util.task;
 import net.javasauce.ss.util.MemoizedSupplier;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
@@ -21,7 +18,6 @@ public abstract sealed class TaskIO<T> implements Supplier<T> permits TaskInput,
 
     protected final Task task;
     private final String name;
-    private final List<Task> dependencies = new ArrayList<>();
 
     // We use a supplier to avoid resolving a tasks output too early.
     protected @Nullable Supplier<CompletableFuture<T>> futureSupplier;
@@ -56,24 +52,13 @@ public abstract sealed class TaskIO<T> implements Supplier<T> permits TaskInput,
     }
 
     /**
-     * Set the IO future supplier, and its required dependencies.
-     *
-     * @param futureSupplier The supplier to provide the future for this IO's value.
-     * @param dependencies   The tasks required to provide the future its value.
-     */
-    protected final void set(Supplier<CompletableFuture<T>> futureSupplier, List<Task> dependencies) {
-        this.futureSupplier = new MemoizedSupplier<>(futureSupplier);
-        this.dependencies.clear();
-        this.dependencies.addAll(dependencies);
-    }
-
-    /**
      * Set the IO future supplier.
      *
      * @param futureSupplier The supplier to provide the future for this IO's value.
      */
-    public final void set(Supplier<CompletableFuture<T>> futureSupplier) {
-        set(futureSupplier, List.of());
+    protected final void set(Supplier<CompletableFuture<T>> futureSupplier) {
+        validateSetPreconditions();
+        this.futureSupplier = new MemoizedSupplier<>(futureSupplier);
     }
 
     /**
@@ -85,6 +70,12 @@ public abstract sealed class TaskIO<T> implements Supplier<T> permits TaskInput,
         set(() -> CompletableFuture.completedFuture(thing));
     }
 
+    protected void validateSetPreconditions() {
+        if (task.isFutureResolved()) {
+            throw new IllegalStateException("Unable to set IO value after task execution has been scheduled.");
+        }
+    }
+
     public final Task getTask() {
         return task;
     }
@@ -93,7 +84,7 @@ public abstract sealed class TaskIO<T> implements Supplier<T> permits TaskInput,
         return name;
     }
 
-    public final List<Task> getDependencies() {
-        return Collections.unmodifiableList(dependencies);
+    final boolean isValueSet() {
+        return futureSupplier != null;
     }
 }

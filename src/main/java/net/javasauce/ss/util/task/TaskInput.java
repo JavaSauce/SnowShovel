@@ -25,7 +25,7 @@ public sealed class TaskInput<T> extends TaskIO<T> permits TaskInput.Collection 
      * @param output The output.
      */
     public void set(TaskOutput<T> output) {
-        set(output::getFuture, List.of(output.getTask()));
+        set(() -> output.getTask().taskFuture().thenCompose(e -> output.getFuture()));
     }
 
     /**
@@ -45,19 +45,16 @@ public sealed class TaskInput<T> extends TaskIO<T> permits TaskInput.Collection 
          *
          * @param outputs The outputs.
          */
-        // TODO this should probably just be List, not Collection
-        public void set(java.util.Collection<TaskOutput<E>> outputs) {
+        public void set(List<TaskOutput<E>> outputs) {
             set(() -> {
                 var futures = FastStream.of(outputs)
                         .map(TaskIO::getFuture)
-                        .toArray(CompletableFuture[]::new);
-                return CompletableFuture.allOf(futures)
+                        .toList();
+                return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
                         .thenApply(e -> FastStream.of(futures)
                                 .map(CompletableFuture::join)
                                 .toList());
-            }, FastStream.of(outputs)
-                    .map(TaskIO::getTask)
-                    .toList());
+            });
         }
     }
 }

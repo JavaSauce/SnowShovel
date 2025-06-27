@@ -30,7 +30,7 @@ public class PrepareToolTask extends Task {
     public final TaskInput<Path> tool = input("tool");
     public final TaskInput<Path> toolDir = input("toolDir");
 
-    public final TaskOutput<PreparedTool> output = output("output");
+    public final TaskOutput<PreparedTool> output = dynamicOutput("output");
 
     private final JdkProvider jdkProvider;
 

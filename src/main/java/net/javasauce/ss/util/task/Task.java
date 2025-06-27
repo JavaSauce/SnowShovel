@@ -139,14 +139,27 @@ public abstract class Task {
     }
 
     /**
-     * // TODO TODO TODO TODO TODO
-     * Create a new output for your task.
+     * Create a new output for your task. You must set a value
+     * before executing the task.
      *
-     * @param name
-     * @return
+     * @param name The name for your output. Used in logging/errors.
+     * @return A new output for your task.
      */
     protected final <T> TaskOutput<T> output(String name) {
-        var output = new TaskOutput<T>(this, name);
+        var output = new TaskOutput<T>(this, name, false);
+        outputs.add(output);
+        return output;
+    }
+
+    /**
+     * Create a new output for your task. You must set a value for this
+     * output before your task finishes executing.
+     *
+     * @param name The name for your output. Used in logging/errors.
+     * @return A new output for your task.
+     */
+    protected final <T> TaskOutput<T> dynamicOutput(String name) {
+        var output = new TaskOutput<T>(this, name, true);
         outputs.add(output);
         return output;
     }
@@ -158,18 +171,14 @@ public abstract class Task {
      */
     public synchronized final CompletableFuture<Task> taskFuture() {
         if (taskFuture == null) {
-            // TODO we should prevent TaskIO (inputs, and outputs which are not dynamic), from being set
-            //  once the taskFuture has been created, otherwise the user could change the task dependency tree
-            //  without it being reflected in the future chain.
-            // TODO we should probably also somehow detect loops in the dependency tree, as that will currently
-            //  just result in a thread deadlock, with no error/logging.
-            // TODO, can we just ignore the dependencies? what if we just get the future for each input/output and chain?
-            //  this will require us to codify outputs which are dynamic and set as a result of executing the task, vs outputs
-            //  which are used as 'inputs' to a task.
-            CompletableFuture<Void> inputFuture = CompletableFuture.allOf(FastStream.concat(inputs, outputs)
-                    .flatMap(TaskIO::getDependencies)
-                    .map(Task::taskFuture)
-                    .toArray(CompletableFuture[]::new)
+            var inputFutures = FastStream.of(inputs)
+                    .map(TaskIO::getFuture);
+            var outputFutures = FastStream.of(outputs)
+                    .filterNot(TaskOutput::isDynamic)
+                    .map(TaskIO::getFuture);
+            CompletableFuture<Void> inputFuture = CompletableFuture.allOf(
+                    FastStream.concat(inputFutures, outputFutures)
+                            .toArray(CompletableFuture[]::new)
             );
             taskFuture = inputFuture.thenApplyAsync(v -> {
                 try {
@@ -185,14 +194,28 @@ public abstract class Task {
 
     private void doExecute() throws Throwable {
         LOGGER.info("Executing task {}", name);
-        // TODO validate inputs are correct
-        // TODO validate an output is set
+        for (TaskInput<?> input : inputs) {
+            if (!input.isValueSet()) {
+                throw new IllegalStateException("Input '" + input.getName() + "' for task '" + getName() + "' must have a value set.");
+            }
+        }
+        for (TaskOutput<?> output : outputs) {
+            if (!output.isDynamic() && !output.isValueSet()) {
+                throw new IllegalStateException("Output '" + output.getName() + "' for task '" + getName() + "' must have a value set before its executed. Did you want a dynamic output instead?.");
+            }
+        }
         TaskCacheBuilder cache = this.cache != null ? this.cache.get() : null;
         if (cache != null && cache.isUpToDate()) {
             LOGGER.info("Skipping task {}, is up-to-date.", name);
             return;
         }
         execute();
+        for (TaskOutput<?> output : outputs) {
+            if (output.isDynamic() && !output.isValueSet()) {
+                throw new IllegalStateException("Output '" + output.getName() + "' for task '" + getName() + "' did not produce a required output.");
+            }
+        }
+
         if (cache != null) {
             cache.writeCache();
         }
@@ -206,5 +229,9 @@ public abstract class Task {
 
     public final String getName() {
         return name;
+    }
+
+    final boolean isFutureResolved() {
+        return taskFuture != null;
     }
 }
