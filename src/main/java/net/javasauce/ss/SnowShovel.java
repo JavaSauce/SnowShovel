@@ -325,7 +325,7 @@ public class SnowShovel implements AutoCloseable {
                 task.tool.set(prepareRemapper.output);
                 task.input.set(downloadClient.output);
                 task.mappings.set(downloadClientMappings.output);
-                task.remapped.deriveFrom(downloadClient.output, e -> e.resolveSibling(FileNameUtils.getBaseName(e.getFileName()) + "-remapped.jar"));
+                task.remapped.set(versionsDir.resolve(id).resolve(id + "-client-remapped.jar"));
             });
 
             List<NewDownloadTask> libraries = FastStream.of(LibraryTasks.getVersionLibraries(manifest, librariesDir))

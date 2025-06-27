@@ -171,14 +171,9 @@ public abstract class Task {
      */
     public synchronized final CompletableFuture<Task> taskFuture() {
         if (taskFuture == null) {
-            var inputFutures = FastStream.of(inputs)
-                    .map(TaskIO::getFuture);
-            var outputFutures = FastStream.of(outputs)
-                    .filterNot(TaskOutput::isDynamic)
-                    .map(TaskIO::getFuture);
-            CompletableFuture<Void> inputFuture = CompletableFuture.allOf(
-                    FastStream.concat(inputFutures, outputFutures)
-                            .toArray(CompletableFuture[]::new)
+            var inputFuture = CompletableFuture.allOf(FastStream.of(inputs)
+                    .map(TaskIO::getFuture)
+                    .toArray(CompletableFuture[]::new)
             );
             taskFuture = inputFuture.thenApplyAsync(v -> {
                 try {

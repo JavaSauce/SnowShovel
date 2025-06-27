@@ -1,6 +1,9 @@
 package net.javasauce.ss.util.task;
 
-import java.util.function.Function;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * An output for a task.
@@ -14,21 +17,61 @@ public final class TaskOutput<T> extends TaskIO<T> {
 
     private final boolean isDynamic;
 
+    private @Nullable CompletableFuture<T> future;
+    private @Nullable T value;
+
     TaskOutput(Task task, String name, boolean isDynamic) {
         super(task, name);
         this.isDynamic = isDynamic;
     }
 
     /**
-     * Derive this tasks output from the output of another task.
+     * Get the future for this tasks output.
      * <p>
-     * This will declare the other task as a dependency on this task.
+     * This future will only complete once this outputs task has completed.
      *
-     * @param output The output to derive from.
-     * @param func   The function to derive the output. Guaranteed to run only after the other task has executed.
+     * @return The future for this output.
      */
-    public <U> void deriveFrom(TaskOutput<? extends U> output, Function<? super U, ? extends T> func) {
-        set(() -> output.getTask().taskFuture().thenCompose(e -> output.getFuture()).thenApply(func));
+    @Override
+    public synchronized CompletableFuture<T> getFuture() {
+        if (future == null) {
+            future = getTask().taskFuture().thenApply(e -> get());
+        }
+        return future;
+    }
+
+    /**
+     * Get the value stored in this output now.
+     * <p>
+     * This will not wait for the task to be complete, and should
+     * be used by tasks internally.
+     * <p>
+     * This can only be used by outputs which are not {@link #isDynamic} or have had their value set.
+     *
+     * @return The value in this output.
+     */
+    @Override
+    public T get() {
+        return Objects.requireNonNull(value, "Output value has not been set yet.");
+    }
+
+    /**
+     * Set the value of this output.
+     * <p>
+     * It is illegal to override the output if the task has already been scheduled, and this output is not {@link #isDynamic}.
+     *
+     * @param value The value.
+     */
+    public void set(T value) {
+        if (task.isFutureResolved() && !isDynamic()) {
+            throw new IllegalStateException("Unable to set Output value after task execution has been scheduled.");
+        }
+        this.value = value;
+    }
+
+    @Override
+    boolean isValueSet() {
+        return value != null;
     }
 
     /**
@@ -36,12 +79,5 @@ public final class TaskOutput<T> extends TaskIO<T> {
      */
     public boolean isDynamic() {
         return isDynamic;
-    }
-
-    @Override
-    protected void validateSetPreconditions() {
-        if (!isDynamic()) {
-            super.validateSetPreconditions();
-        }
     }
 }
