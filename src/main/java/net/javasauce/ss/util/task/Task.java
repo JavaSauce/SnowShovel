@@ -158,7 +158,7 @@ public abstract class Task {
      * @param name The name for your output. Used in logging/errors.
      * @return A new output for your task.
      */
-    protected final <T> TaskOutput<T> dynamicOutput(String name) {
+    protected final <T> TaskOutput<T> computedOutput(String name) {
         var output = new TaskOutput<T>(this, name, true);
         outputs.add(output);
         return output;
@@ -195,8 +195,8 @@ public abstract class Task {
             }
         }
         for (TaskOutput<?> output : outputs) {
-            if (!output.isDynamic() && !output.isValueSet()) {
-                throw new IllegalStateException("Output '" + output.getName() + "' for task '" + getName() + "' must have a value set before its executed. Did you want a dynamic output instead?.");
+            if (!output.isComputed() && !output.isValueSet()) {
+                throw new IllegalStateException("Output '" + output.getName() + "' for task '" + getName() + "' must have a value set before its executed. Did you want a computed output instead?.");
             }
         }
         TaskCacheBuilder cache = this.cache != null ? this.cache.get() : null;
@@ -206,7 +206,7 @@ public abstract class Task {
         }
         execute();
         for (TaskOutput<?> output : outputs) {
-            if (output.isDynamic() && !output.isValueSet()) {
+            if (output.isComputed() && !output.isValueSet()) {
                 throw new IllegalStateException("Output '" + output.getName() + "' for task '" + getName() + "' did not produce a required output.");
             }
         }

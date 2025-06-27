@@ -19,7 +19,7 @@ import java.util.function.Supplier;
 public sealed class TaskInput<T> extends TaskIO<T> permits TaskInput.Collection {
 
     // We use a supplier to avoid resolving a tasks output too early.
-    protected @Nullable Supplier<CompletableFuture<T>> futureSupplier;
+    private @Nullable Supplier<CompletableFuture<T>> futureSupplier;
 
     TaskInput(Task task, String name) {
         super(task, name);

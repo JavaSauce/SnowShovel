@@ -8,21 +8,21 @@ import java.util.concurrent.CompletableFuture;
 /**
  * An output for a task.
  * <p>
- * Task outputs may be declared as dynamic, indicating that their output is set
+ * Task outputs may be declared as computed, indicating that their output is set
  * as a result of the task being executed.
  * <p>
  * Created by covers1624 on 6/26/25.
  */
 public final class TaskOutput<T> extends TaskIO<T> {
 
-    private final boolean isDynamic;
+    private final boolean isComputed;
 
     private @Nullable CompletableFuture<T> future;
     private @Nullable T value;
 
-    TaskOutput(Task task, String name, boolean isDynamic) {
+    TaskOutput(Task task, String name, boolean isComputed) {
         super(task, name);
-        this.isDynamic = isDynamic;
+        this.isComputed = isComputed;
     }
 
     /**
@@ -46,7 +46,7 @@ public final class TaskOutput<T> extends TaskIO<T> {
      * This will not wait for the task to be complete, and should
      * be used by tasks internally.
      * <p>
-     * This can only be used by outputs which are not {@link #isDynamic} or have had their value set.
+     * This can only be used by outputs which are not {@link #isComputed} or have had their value set.
      *
      * @return The value in this output.
      */
@@ -58,12 +58,12 @@ public final class TaskOutput<T> extends TaskIO<T> {
     /**
      * Set the value of this output.
      * <p>
-     * It is illegal to override the output if the task has already been scheduled, and this output is not {@link #isDynamic}.
+     * It is illegal to override the output if the task has already been scheduled, and this output is not {@link #isComputed}.
      *
      * @param value The value.
      */
     public void set(T value) {
-        if (task.isFutureResolved() && !isDynamic()) {
+        if (task.isFutureResolved() && !isComputed()) {
             throw new IllegalStateException("Unable to set Output value after task execution has been scheduled.");
         }
         this.value = value;
@@ -75,9 +75,9 @@ public final class TaskOutput<T> extends TaskIO<T> {
     }
 
     /**
-     * @return If this task output is dynamic.
+     * @return If this task output value is set when the task executes.
      */
-    public boolean isDynamic() {
-        return isDynamic;
+    public boolean isComputed() {
+        return isComputed;
     }
 }
