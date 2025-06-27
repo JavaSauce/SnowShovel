@@ -21,6 +21,8 @@ import net.javasauce.ss.tasks.report.DiscordReportTask;
 import net.javasauce.ss.tasks.report.GenerateReportTask;
 import net.javasauce.ss.tasks.report.TestCaseDef;
 import net.javasauce.ss.util.*;
+import net.javasauce.ss.util.task.Task;
+import org.apache.commons.compress.utils.FileNameUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.Constants;
@@ -37,6 +39,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.util.List.of;
 
@@ -161,7 +167,7 @@ public class SnowShovel implements AutoCloseable {
             } else if (optSet.has(finalizeMatrixOpt)) {
                 ss.runFinalizeMatrix(optSet.valueOf(finalizeMatrixOpt));
             } else {
-                ss.run(runRequest);
+                ss.run2(runRequest);
             }
         }
 
@@ -177,6 +183,24 @@ public class SnowShovel implements AutoCloseable {
     private static final String TAG_SNOW_SHOVEL_VERSION = "SnowShovelVersion";
     private static final String TAG_DECOMPILER_VERSION = "DecompilerVersion";
 
+    private final AtomicInteger downloadExecutorCounter = new AtomicInteger();
+    private final ExecutorService downloadExecutor = Executors.newFixedThreadPool(
+            Runtime.getRuntime().availableProcessors() * 2,
+            r -> {
+                Thread thread = new Thread(r);
+                thread.setName("Download executor " + downloadExecutorCounter.getAndIncrement());
+                thread.setDaemon(true);
+                return thread;
+            }
+    );
+
+    private final ExecutorService decompileExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread thread = new Thread(r);
+        thread.setName("Decompile Thread");
+        thread.setDaemon(true);
+        return thread;
+    });
+
     public final String gitRepo;
     public final Path workDir;
     public final boolean shouldPush;
@@ -188,6 +212,7 @@ public class SnowShovel implements AutoCloseable {
     public final Path versionsDir;
     public final Path librariesDir;
     public final Path toolsDir;
+    public final Path tempDir;
 
     public final Path repoDir;
     public final Path cacheDir;
@@ -216,6 +241,7 @@ public class SnowShovel implements AutoCloseable {
         versionsDir = workDir.resolve("versions");
         librariesDir = workDir.resolve("libraries");
         toolsDir = workDir.resolve("tools");
+        tempDir = workDir.resolve("temp");
 
         repoDir = workDir.resolve("repo");
         cacheDir = workDir.resolve("cache");
@@ -234,6 +260,101 @@ public class SnowShovel implements AutoCloseable {
         git = GitTasks.setup(repoDir, gitRepo);
 
         pullCache();
+    }
+
+    private void run2(RunRequest runRequest) throws IOException {
+        preTestStats.putAll(pullStatsFromBranches());
+        testStats.putAll(preTestStats);
+
+        var remapperNotation = MavenNotation.parse("net.covers1624:FastRemapper:0.3.2.19@zip");
+
+        // TODO specific MavenDownloadTask
+        var downloadRemapper = NewDownloadTask.create("downloadRemapper", downloadExecutor, http, task -> {
+            task.configureForMaven(toolsDir, "https://maven.covers1624.net/", remapperNotation);
+        });
+
+        var prepareRemapper = PrepareToolTask.create("prepareRemapper", downloadExecutor, jdkProvider, task -> {
+            task.javaVersion.setOptional(JavaVersion.JAVA_17);
+            task.notation.set(remapperNotation);
+            task.tool.set(downloadRemapper.output);
+            task.toolDir.set(toolsDir);
+            task.taskFuture().join();
+        });
+
+        var toProcess = prepareRequestedVersions(runRequest.versions)
+                .toList();
+        var decompilerVersion = decompilerOverride
+                .or(() -> Optional.ofNullable(runRequest.decompilerVersion))
+                .orElseGet(decompiler::findLatest);
+
+        var decompilerNotation = MavenNotation.parse("net.javasauce:Decompiler:0:testframework@zip").withVersion(decompilerVersion);
+        var downloadDecompiler = NewDownloadTask.create("downloadDecompiler", downloadExecutor, http, task -> {
+            task.configureForMaven(toolsDir, "https://maven.covers1624.net/", decompilerNotation);
+        });
+
+        var prepareDecompiler = PrepareToolTask.create("prepareDecompiler", downloadExecutor, jdkProvider, task -> {
+            task.notation.set(decompilerNotation);
+            task.tool.set(downloadDecompiler.output);
+            task.toolDir.set(toolsDir);
+        });
+
+        Map<LibraryTasks.LibraryDownload, NewDownloadTask> libraryDownloads = new HashMap<>();
+
+        List<DecompileTask> decompileTasks = new ArrayList<>();
+        for (ProcessableVersion process : toProcess) {
+            var manifest = process.manifest;
+            var id = manifest.id();
+
+            var downloadClient = NewDownloadTask.create("downloadClient_" + id, downloadExecutor, http, task -> {
+                var download = manifest.downloads().get("client");
+                task.output.set(versionsDir.resolve(id).resolve(id + "-client.jar"));
+                task.url.set(download.url());
+                task.downloadHash.setOptional(download.sha1());
+                task.downloadLen.set(download.size());
+            });
+
+            var downloadClientMappings = NewDownloadTask.create("downloadClientMappings_" + id, downloadExecutor, http, task -> {
+                var download = manifest.downloads().get("client_mappings");
+                task.output.set(versionsDir.resolve(id).resolve(id + "-client_mappings.jar"));
+                task.url.set(download.url());
+                task.downloadHash.setOptional(download.sha1());
+                task.downloadLen.set(download.size());
+            });
+
+            var remapClient = RemapperTask.create("remapClient_" + id, ForkJoinPool.commonPool(), task -> {
+                task.tool.set(prepareRemapper.output);
+                task.input.set(downloadClient.output);
+                task.mappings.set(downloadClientMappings.output);
+                task.remapped.deriveFrom(downloadClient.output, e -> e.resolveSibling(FileNameUtils.getBaseName(e.getFileName()) + "-remapped.jar"));
+            });
+
+            List<NewDownloadTask> libraries = FastStream.of(LibraryTasks.getVersionLibraries(manifest, librariesDir))
+                    .map(library -> libraryDownloads.computeIfAbsent(library, e2 ->
+                            NewDownloadTask.create("downloadLibrary_" + library.notation(), downloadExecutor, http, task -> {
+                                task.url.set(library.url());
+                                task.output.set(library.path());
+                                task.downloadHash.setOptional(library.sha1());
+                                task.downloadLen.set(library.size());
+                            })))
+                    .toList();
+
+            var decompileTask = DecompileTask.create("decompile_" + id, decompileExecutor, jdkProvider, task -> {
+                task.javaVersion.set(manifest.computeJavaVersion());
+                task.tool.set(prepareDecompiler.output);
+                task.libraries.set(FastStream.of(libraries).map(e -> e.output).toList());
+                task.inputJar.set(remapClient.remapped);
+                task.output.set(tempDir.resolve(id).resolve("decompiled.zip"));
+                task.statsOutput.set(tempDir.resolve(id).resolve("test_stats.json"));
+            });
+            decompileTasks.add(decompileTask);
+        }
+        // TODO temp, probably a `Task.runAll(Collection<Task>)` or smth
+        CompletableFuture.allOf(
+                        FastStream.of(decompileTasks)
+                                .map(Task::taskFuture)
+                                .toArray(CompletableFuture[]::new)
+                )
+                .join();
     }
 
     private void run(RunRequest runRequest) throws IOException {
@@ -558,7 +679,7 @@ public class SnowShovel implements AutoCloseable {
 
         // Remap the jar.
         var remappedJar = clientJar.resolveSibling(FilenameUtils.getBaseName(clientJar.toString()) + "-remapped.jar");
-        RemapperTasks.runRemapper(this, clientJar, clientMappings, remappedJar);
+        RemapperTask.runRemapper(this, clientJar, clientMappings, remappedJar);
 
         // Compute and download all the libraries.
         List<LibraryTasks.LibraryDownload> libraries = LibraryTasks.getVersionLibraries(manifest, librariesDir);
@@ -566,7 +687,7 @@ public class SnowShovel implements AutoCloseable {
 
         // Run the decompiler.
         JavaVersion javaVersion = manifest.computeJavaVersion();
-        DecompileTasks.decompileAndTest(
+        DecompileTask.decompileAndTest(
                 this,
                 javaVersion,
                 FastStream.of(libraries)
@@ -660,6 +781,8 @@ public class SnowShovel implements AutoCloseable {
     @Override
     public void close() {
         git.close();
+        downloadExecutor.close();
+        decompileExecutor.close();
     }
 
     public record RunRequest(
