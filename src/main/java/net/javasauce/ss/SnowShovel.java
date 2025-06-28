@@ -23,6 +23,7 @@ import net.javasauce.ss.tasks.report.TestCaseDef;
 import net.javasauce.ss.util.*;
 import net.javasauce.ss.util.task.Task;
 import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.transport.CredentialsProvider;
@@ -41,7 +42,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.util.List.of;
 
@@ -182,23 +182,20 @@ public class SnowShovel implements AutoCloseable {
     private static final String TAG_SNOW_SHOVEL_VERSION = "SnowShovelVersion";
     private static final String TAG_DECOMPILER_VERSION = "DecompilerVersion";
 
-    private final AtomicInteger downloadExecutorCounter = new AtomicInteger();
     private final ExecutorService downloadExecutor = Executors.newFixedThreadPool(
             Runtime.getRuntime().availableProcessors() * 2,
-            r -> {
-                Thread thread = new Thread(r);
-                thread.setName("Download executor " + downloadExecutorCounter.getAndIncrement());
-                thread.setDaemon(true);
-                return thread;
-            }
+            new BasicThreadFactory.Builder()
+                    .namingPattern("Download executor %d")
+                    .daemon(true)
+                    .build()
     );
 
-    private final ExecutorService decompileExecutor = Executors.newSingleThreadExecutor(r -> {
-        Thread thread = new Thread(r);
-        thread.setName("Decompile Thread");
-        thread.setDaemon(true);
-        return thread;
-    });
+    // Single thread executor to bottleneck the Decompile tasks through,
+    // as the decompiler does its own threading in its spawned process
+    private final ExecutorService decompileExecutor = Executors.newSingleThreadExecutor(new BasicThreadFactory.Builder()
+            .namingPattern("Decompiler Thread")
+            .build()
+    );
 
     public final String gitRepo;
     public final Path workDir;
