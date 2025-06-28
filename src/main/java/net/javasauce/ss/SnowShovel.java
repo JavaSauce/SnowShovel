@@ -41,7 +41,6 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ForkJoinPool;
 
 import static java.util.List.of;
 
@@ -190,6 +189,13 @@ public class SnowShovel implements AutoCloseable {
                     .build()
     );
 
+    // Single thread executor to bottleneck the Remapper tasks through,
+    // This is mostly for log clarity, so its logs aren't intertwined with others.
+    private final ExecutorService remapperExecutor = Executors.newSingleThreadExecutor(new BasicThreadFactory.Builder()
+            .namingPattern("Remapper Thread")
+            .build()
+    );
+
     // Single thread executor to bottleneck the Decompile tasks through,
     // as the decompiler does its own threading in its spawned process
     private final ExecutorService decompileExecutor = Executors.newSingleThreadExecutor(new BasicThreadFactory.Builder()
@@ -318,7 +324,7 @@ public class SnowShovel implements AutoCloseable {
                 task.downloadLen.set(download.size());
             });
 
-            var remapClient = RemapperTask.create("remapClient_" + id, ForkJoinPool.commonPool(), task -> {
+            var remapClient = RemapperTask.create("remapClient_" + id, remapperExecutor, task -> {
                 task.tool.set(prepareRemapper.output);
                 task.javaHome.set(getJdkTask(JavaVersion.JAVA_17).javaHome);
                 task.input.set(downloadClient.output);
