@@ -22,7 +22,6 @@ import net.javasauce.ss.tasks.report.GenerateReportTask;
 import net.javasauce.ss.tasks.report.TestCaseDef;
 import net.javasauce.ss.util.*;
 import net.javasauce.ss.util.task.Task;
-import org.apache.commons.compress.utils.FileNameUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.Constants;
@@ -348,13 +347,7 @@ public class SnowShovel implements AutoCloseable {
             });
             decompileTasks.add(decompileTask);
         }
-        // TODO temp, probably a `Task.runAll(Collection<Task>)` or smth
-        CompletableFuture.allOf(
-                        FastStream.of(decompileTasks)
-                                .map(Task::taskFuture)
-                                .toArray(CompletableFuture[]::new)
-                )
-                .join();
+        Task.runTasks(decompileTasks);
     }
 
     private void run(RunRequest runRequest) throws IOException {

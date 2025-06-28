@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -56,6 +57,19 @@ public abstract class Task {
     public Task(String name, Executor executor) {
         this.name = name;
         this.executor = executor;
+    }
+
+    /**
+     * Schedule the given tasks and wait for them to complete.
+     *
+     * @param tasks The tasks to run.
+     */
+    public static void runTasks(Iterable<? extends Task> tasks) {
+        var futures = FastStream.of(tasks)
+                .map(Task::taskFuture)
+                .toArray(CompletableFuture[]::new);
+
+        CompletableFuture.allOf(futures).join();
     }
 
     /**
