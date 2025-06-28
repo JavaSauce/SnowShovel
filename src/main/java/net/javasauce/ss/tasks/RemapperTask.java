@@ -27,6 +27,7 @@ public class RemapperTask extends Task {
     private static final Logger LOGGER = LoggerFactory.getLogger(RemapperTask.class);
 
     public final TaskInput<PrepareToolTask.PreparedTool> tool = input("tool");
+    public final TaskInput<Path> javaHome = input("javaHome");
     public final TaskInput<Path> input = input("input");
     public final TaskInput<Path> mappings = input("mappings");
     public final TaskOutput<Path> remapped = output("remapped");
@@ -57,7 +58,7 @@ public class RemapperTask extends Task {
         LOGGER.info("Remapping {} with {}", this.input, tool.toolJar());
 
         var procResult = ProcessUtils.runProcess(
-                JavaInstall.getJavaExecutable(requireNonNull(tool.javaHome()), true),
+                JavaInstall.getJavaExecutable(javaHome.get(), true),
                 List.of(
                         "-jar",
                         tool.toolJar().toAbsolutePath().toString(),

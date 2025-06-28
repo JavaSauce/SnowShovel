@@ -229,6 +229,8 @@ public class SnowShovel implements AutoCloseable {
     private final Map<String, CommittedTestCaseDef> testStats = new HashMap<>();
     private final Map<String, String> commitTitles = new HashMap<>();
 
+    private final Map<JavaVersion, SetupJdkTask> jdkTasks = new HashMap<>();
+
     public SnowShovel(String gitRepo, Path workDir, boolean shouldPush, boolean shouldClean, Optional<String> decompilerOverride, List<String> mcVersionsOverride) throws IOException {
         this.gitRepo = gitRepo;
         this.workDir = workDir;
@@ -272,8 +274,7 @@ public class SnowShovel implements AutoCloseable {
             task.configureForMaven(toolsDir, "https://maven.covers1624.net/", remapperNotation);
         });
 
-        var prepareRemapper = PrepareToolTask.create("prepareRemapper", downloadExecutor, jdkProvider, task -> {
-            task.javaVersion.set(Optional.of(JavaVersion.JAVA_17));
+        var prepareRemapper = PrepareToolTask.create("prepareRemapper", downloadExecutor, task -> {
             task.notation.set(remapperNotation);
             task.tool.set(downloadRemapper.output);
             task.toolDir.set(toolsDir);
@@ -291,7 +292,7 @@ public class SnowShovel implements AutoCloseable {
             task.configureForMaven(toolsDir, "https://maven.covers1624.net/", decompilerNotation);
         });
 
-        var prepareDecompiler = PrepareToolTask.create("prepareDecompiler", downloadExecutor, jdkProvider, task -> {
+        var prepareDecompiler = PrepareToolTask.create("prepareDecompiler", downloadExecutor, task -> {
             task.notation.set(decompilerNotation);
             task.tool.set(downloadDecompiler.output);
             task.toolDir.set(toolsDir);
@@ -322,6 +323,7 @@ public class SnowShovel implements AutoCloseable {
 
             var remapClient = RemapperTask.create("remapClient_" + id, ForkJoinPool.commonPool(), task -> {
                 task.tool.set(prepareRemapper.output);
+                task.javaHome.set(getJdkTask(JavaVersion.JAVA_17).javaHome);
                 task.input.set(downloadClient.output);
                 task.mappings.set(downloadClientMappings.output);
                 task.remapped.set(versionsDir.resolve(id).resolve(id + "-client-remapped.jar"));
@@ -338,7 +340,7 @@ public class SnowShovel implements AutoCloseable {
                     .toList();
 
             var decompileTask = DecompileTask.create("decompile_" + id, decompileExecutor, jdkProvider, task -> {
-                task.javaVersion.set(manifest.computeJavaVersion());
+                task.javaHome.set(getJdkTask(manifest.computeJavaVersion()).javaHome);
                 task.tool.set(prepareDecompiler.output);
                 task.libraries.set(FastStream.of(libraries).map(e -> e.output).toList());
                 task.inputJar.set(remapClient.remapped);
@@ -348,6 +350,14 @@ public class SnowShovel implements AutoCloseable {
             decompileTasks.add(decompileTask);
         }
         Task.runTasks(decompileTasks);
+    }
+
+    private SetupJdkTask getJdkTask(JavaVersion javaVersion) {
+        return jdkTasks.computeIfAbsent(javaVersion, e ->
+                SetupJdkTask.create("provisionJdk_" + javaVersion.shortString, downloadExecutor, jdkProvider, task -> {
+                    task.javaVersion.set(javaVersion);
+                })
+        );
     }
 
     private void run(RunRequest runRequest) throws IOException {

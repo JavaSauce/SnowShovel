@@ -33,7 +33,7 @@ public class DecompileTask extends Task {
 
     private final JdkProvider jdkProvider;
 
-    public final TaskInput<JavaVersion> javaVersion = input("javaVersion");
+    public final TaskInput<Path> javaHome = input("javaHome");
     public final TaskInput<PrepareToolTask.PreparedTool> tool = input("tool");
     public final TaskInput.Collection<Path> libraries = inputCollection("libraries");
     public final TaskInput<Path> inputJar = input("inputJar");
@@ -59,9 +59,8 @@ public class DecompileTask extends Task {
         Files.createDirectories(dir);
 
         var tool = this.tool.get();
-        var javaHome = jdkProvider.findOrProvisionJdk(javaVersion.get());
         var procResult = ProcessUtils.runProcess(
-                JavaInstall.getJavaExecutable(javaHome, true),
+                JavaInstall.getJavaExecutable(javaHome.get(), true),
                 List.of(
                         "-ea", "-XX:-OmitStackTraceInFastThrow",
                         "-Dcoffeegrinder.testcases.library=true",
