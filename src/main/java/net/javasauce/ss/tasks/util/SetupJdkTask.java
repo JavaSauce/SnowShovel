@@ -1,4 +1,4 @@
-package net.javasauce.ss.tasks;
+package net.javasauce.ss.tasks.util;
 
 import net.covers1624.jdkutils.JavaVersion;
 import net.javasauce.ss.util.JdkProvider;
