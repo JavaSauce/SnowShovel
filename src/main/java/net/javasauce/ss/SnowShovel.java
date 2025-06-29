@@ -193,6 +193,7 @@ public class SnowShovel implements AutoCloseable {
     // This is mostly for log clarity, so its logs aren't intertwined with others.
     private final ExecutorService remapperExecutor = Executors.newSingleThreadExecutor(new BasicThreadFactory.Builder()
             .namingPattern("Remapper Thread")
+            .daemon(true)
             .build()
     );
 
@@ -200,6 +201,7 @@ public class SnowShovel implements AutoCloseable {
     // as the decompiler does its own threading in its spawned process
     private final ExecutorService decompileExecutor = Executors.newSingleThreadExecutor(new BasicThreadFactory.Builder()
             .namingPattern("Decompiler Thread")
+            .daemon(true)
             .build()
     );
 
@@ -787,6 +789,7 @@ public class SnowShovel implements AutoCloseable {
     public void close() {
         git.close();
         downloadExecutor.close();
+        remapperExecutor.close();
         decompileExecutor.close();
     }
 
