@@ -9,7 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -46,6 +46,8 @@ public abstract class Task {
     private @Nullable CompletableFuture<Task> taskFuture;
     private @Nullable Supplier<TaskCacheBuilder> cache;
 
+    private final List<Task> dependsOn = new ArrayList<>();
+
     /**
      * @param name     The name for this task, used for logging.
      * @param executor The executor to run this task on. If you don't know what to provide
@@ -66,7 +68,7 @@ public abstract class Task {
      */
     public static void runTasks(Iterable<? extends Task> tasks) {
         var futures = FastStream.of(tasks)
-                .map(Task::taskFuture)
+                .map(Task::getFuture)
                 .toArray(CompletableFuture[]::new);
 
         CompletableFuture.allOf(futures).join();
@@ -179,15 +181,38 @@ public abstract class Task {
     }
 
     /**
+     * Mark this task as requiring the provided tasks, without
+     * declaring any IO dependencies.
+     *
+     * @param tasks The tasks to depend on.
+     */
+    public void dependsOn(Task... tasks) {
+        dependsOn(Arrays.asList(tasks));
+    }
+
+    /**
+     * Mark this task as requiring the provided tasks, without
+     * declaring any IO dependencies.
+     *
+     * @param tasks The tasks to depend on.
+     */
+    public void dependsOn(Iterable<Task> tasks) {
+        tasks.forEach(dependsOn::add);
+    }
+
+    /**
      * Resolve this tasks dependencies and return a future for the execution of this task.
      *
      * @return The future.
      */
-    public synchronized final CompletableFuture<Task> taskFuture() {
+    public synchronized final CompletableFuture<Task> getFuture() {
         if (taskFuture == null) {
-            var inputFuture = CompletableFuture.allOf(FastStream.of(inputs)
-                    .map(TaskIO::getFuture)
-                    .toArray(CompletableFuture[]::new)
+            var inputFuture = CompletableFuture.allOf(
+                    FastStream.concat(
+                                    FastStream.of(inputs).map(TaskIO::getFuture),
+                                    FastStream.of(dependsOn).map(Task::getFuture)
+                            )
+                            .toArray(CompletableFuture[]::new)
             );
             taskFuture = inputFuture.thenApplyAsync(v -> {
                 try {

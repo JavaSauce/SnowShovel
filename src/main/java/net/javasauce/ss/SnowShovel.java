@@ -281,7 +281,6 @@ public class SnowShovel implements AutoCloseable {
             task.notation.set(remapperNotation);
             task.tool.set(downloadRemapper.output);
             task.toolDir.set(toolsDir);
-            task.taskFuture().join();
         });
 
         var toProcess = prepareRequestedVersions(runRequest.versions)

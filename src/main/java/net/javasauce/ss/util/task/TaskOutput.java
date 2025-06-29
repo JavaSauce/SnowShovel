@@ -35,7 +35,7 @@ public final class TaskOutput<T> extends TaskIO<T> {
     @Override
     public synchronized CompletableFuture<T> getFuture() {
         if (future == null) {
-            future = getTask().taskFuture().thenApply(e -> get());
+            future = getTask().getFuture().thenApply(e -> get());
         }
         return future;
     }
