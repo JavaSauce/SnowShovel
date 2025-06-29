@@ -258,6 +258,8 @@ public class SnowShovel implements AutoCloseable {
         decompiler = new ToolProvider(this, MavenNotation.parse("net.javasauce:Decompiler:0:testframework@zip"))
                 .enableExtraction();
 
+        Files.walkFileTree(tempDir, new DeleteHierarchyVisitor());
+
         // Nuke the repo if we are told to start from scratch.
         if (shouldClean && Files.exists(repoDir)) {
             Files.walkFileTree(repoDir, new DeleteHierarchyVisitor());
