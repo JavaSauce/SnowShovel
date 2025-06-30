@@ -3,6 +3,7 @@ package net.javasauce.ss.tasks.util;
 import net.covers1624.quack.io.IOUtils;
 import net.javasauce.ss.util.task.Task;
 import net.javasauce.ss.util.task.TaskInput;
+import net.javasauce.ss.util.task.TaskOutput;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,7 +19,7 @@ import java.util.zip.ZipInputStream;
 public class UnzipTask extends Task {
 
     public final TaskInput<Path> zip = input("zip");
-    public final TaskInput<Path> output = input("output");
+    public final TaskOutput<Path> output = output("output");
 
     private UnzipTask(String name, Executor executor) {
         super(name, executor);
