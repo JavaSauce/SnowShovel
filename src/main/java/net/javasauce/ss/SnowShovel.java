@@ -276,16 +276,8 @@ public class SnowShovel implements AutoCloseable {
         preTestStats.putAll(pullStatsFromBranches());
         testStats.putAll(preTestStats);
 
-        var remapperNotation = MavenNotation.parse("net.covers1624:FastRemapper:0.3.2.19@zip");
-
-        // TODO specific MavenDownloadTask
-        var downloadRemapper = NewDownloadTask.create("downloadRemapper", downloadExecutor, http, task -> {
-            task.configureForMaven(toolsDir, "https://maven.covers1624.net/", remapperNotation);
-        });
-
-        var prepareRemapper = PrepareToolTask.create("prepareRemapper", downloadExecutor, task -> {
-            task.notation.set(remapperNotation);
-            task.tool.set(downloadRemapper.output);
+        var prepareRemapper = PrepareToolTask.create("prepareRemapper", downloadExecutor, http, task -> {
+            task.notation.set(MavenNotation.parse("net.covers1624:FastRemapper:0.3.2.19@zip"));
             task.toolDir.set(toolsDir);
         });
 
@@ -295,14 +287,8 @@ public class SnowShovel implements AutoCloseable {
                 .or(() -> Optional.ofNullable(runRequest.decompilerVersion))
                 .orElseGet(decompiler::findLatest);
 
-        var decompilerNotation = MavenNotation.parse("net.javasauce:Decompiler:0:testframework@zip").withVersion(decompilerVersion);
-        var downloadDecompiler = NewDownloadTask.create("downloadDecompiler", downloadExecutor, http, task -> {
-            task.configureForMaven(toolsDir, "https://maven.covers1624.net/", decompilerNotation);
-        });
-
-        var prepareDecompiler = PrepareToolTask.create("prepareDecompiler", downloadExecutor, task -> {
-            task.notation.set(decompilerNotation);
-            task.tool.set(downloadDecompiler.output);
+        var prepareDecompiler = PrepareToolTask.create("prepareDecompiler", downloadExecutor, http, task -> {
+            task.notation.set(MavenNotation.parse("net.javasauce:Decompiler:0:testframework@zip").withVersion(decompilerVersion));
             task.toolDir.set(toolsDir);
         });
 

@@ -1,6 +1,5 @@
 package net.javasauce.ss.tasks;
 
-import net.covers1624.quack.maven.MavenNotation;
 import net.covers1624.quack.net.HttpEngineDownloadAction;
 import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.covers1624.quack.util.SneakyUtils.ThrowingConsumer;
@@ -57,13 +56,6 @@ public class NewDownloadTask extends Task {
         var task = new NewDownloadTask(name, executor, http);
         configure.accept(task);
         return task;
-    }
-
-    public NewDownloadTask configureForMaven(Path destDir, String repo, MavenNotation notation) {
-        output.set(notation.toPath(destDir));
-        url.set(notation.toURL(repo).toString());
-        localOverride.set(Optional.ofNullable(findMavenLocalFile(notation)));
-        return this;
     }
 
     public NewDownloadTask addMutator(ThrowingConsumer<Path, IOException> mutFunc) {
@@ -134,15 +126,5 @@ public class NewDownloadTask extends Task {
         }
 
         return true;
-    }
-
-    private static @Nullable Path findMavenLocalFile(MavenNotation notation) {
-        String userHome = System.getProperty("user.home");
-        if (userHome == null) return null;
-
-        Path mavenLocalFile = notation.toPath(Path.of(userHome).resolve(".m2/repository"));
-        if (!Files.exists(mavenLocalFile)) return null;
-
-        return mavenLocalFile;
     }
 }
