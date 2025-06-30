@@ -228,6 +228,7 @@ public abstract class Task {
             var inputFuture = CompletableFuture.allOf(
                     FastStream.concat(
                                     FastStream.of(dependsOn).map(Task::getFuture),
+                                    FastStream.of(innerTasks).map(Task::getFuture),
                                     FastStream.of(outputs).map(TaskOutput::deriveFuture).filter(Objects::nonNull),
                                     FastStream.of(inputs).map(TaskIO::getFuture)
                             )
