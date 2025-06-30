@@ -6,6 +6,8 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -62,17 +64,46 @@ public sealed class TaskInput<T> extends TaskIO<T> permits TaskInput.Collection 
     }
 
     /**
-     * Set the value of this input to be the value of the provided
-     * task output, once it's complete.
+     * Set the value of this input to be the value of another input or output.
      * <p>
-     * This will declare a dependency between the tasks.
+     * If provided an Input of another task, this will copy the inputs requirements. If provided
+     * an output of another task, the other task will be marked as a dependency.
      * <p>
      * It is illegal to override a task Input, if the task has already been scheduled.
      *
-     * @param output The output.
+     * @param io The IO to set this input from.
      */
-    public void set(TaskOutput<T> output) {
-        set(output::getFuture);
+    public void set(TaskIO<T> io) {
+        set(io::getFuture);
+    }
+
+    /**
+     * Derive this input's value from the input or output of another task, with the given
+     * function applied to the result.
+     * <p>
+     * If provided an Input of another task, this will copy the inputs requirements. If provided
+     * an output of another task, this other task will be marked as a dependency.
+     *
+     * @param aIo  The IO to derive from.
+     * @param func The function to apply
+     */
+    public <A> void deriveFrom(TaskIO<A> aIo, Function<? super A, ? extends T> func) {
+        set(() -> aIo.getFuture().thenApply(func));
+    }
+
+    /**
+     * Derive this input's value from multiple inputs and/or outputs of other tasks, with the given
+     * function applied to the result.
+     * <p>
+     * If provided an Input of another task, this will copy the inputs requirements. If provided
+     * an output of another task, this other task will be marked as a dependency.
+     *
+     * @param aIo  The first IO to derive from.
+     * @param bIo  The second IO to derive from.
+     * @param func The function to apply
+     */
+    public <A, B> void deriveFrom(TaskIO<A> aIo, TaskIO<B> bIo, BiFunction<? super A, ? super B, ? extends T> func) {
+        set(() -> aIo.getFuture().thenCombineAsync(bIo.getFuture(), func));
     }
 
     /**

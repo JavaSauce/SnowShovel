@@ -1,9 +1,12 @@
 package net.javasauce.ss.util.task;
 
+import net.javasauce.ss.util.MemoizedSupplier;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
 /**
  * An output for a task.
@@ -11,12 +14,16 @@ import java.util.concurrent.CompletableFuture;
  * Task outputs may be declared as computed, indicating that their output is set
  * as a result of the task being executed.
  * <p>
+ * Task outputs may be derived from the values in other inputs or outputs, these are always resolved and set
+ * before the Output's task is executed.
+ * <p>
  * Created by covers1624 on 6/26/25.
  */
 public final class TaskOutput<T> extends TaskIO<T> {
 
     private final boolean isComputed;
 
+    private @Nullable MemoizedSupplier<CompletableFuture<T>> derivedFuture;
     private @Nullable CompletableFuture<T> future;
     private @Nullable T value;
 
@@ -69,6 +76,48 @@ public final class TaskOutput<T> extends TaskIO<T> {
         this.value = value;
     }
 
+    /**
+     * Derive this output's value from the input or output of another task, with the given
+     * function applied to the result.
+     * <p>
+     * Derived outputs are always resolved before the current task is run. If you provide Inputs for derivation
+     * it will not mark the task they are from as a dependency, only any task that input depends on will be marked
+     * dependencies. Conversely, if you provide an output, that task will become a dependency.
+     *
+     * @param aIo  The IO to derive from.
+     * @param func The function to apply
+     */
+    public <A> void deriveFrom(TaskIO<? extends A> aIo, Function<? super A, ? extends T> func) {
+        if (isComputed()) throw new UnsupportedOperationException("Currently can't use deriveFrom for computed outputs.");
+        if (task.isFutureResolved()) throw new IllegalStateException("Unable to set Output value after task execution has been scheduled.");
+
+        derivedFuture = new MemoizedSupplier<>(() -> aIo.getFuture().thenApply(e -> {
+            value = func.apply(e);
+            return value;
+        }));
+    }
+
+    /**
+     * Derive this output's value from multiple inputs and/or outputs of other tasks, with the given
+     * function applied to the result.
+     * <p>
+     * Derived outputs are always resolved before the current task is run. If you provide Inputs for derivation
+     * it will not mark the task they are from as a dependency, only any task that input depends on will be marked
+     * dependencies. Conversely, if you provide an output, that task will become a dependency.
+     *
+     * @param aIo  The IO to derive from.
+     * @param func The function to apply
+     */
+    public <A, B> void deriveFrom(TaskIO<? extends A> aIo, TaskIO<? extends B> bIo, BiFunction<? super A, ? super B, ? extends T> func) {
+        if (isComputed()) throw new UnsupportedOperationException("Currently can't use deriveFrom for computed outputs.");
+        if (task.isFutureResolved()) throw new IllegalStateException("Unable to set Output value after task execution has been scheduled.");
+
+        derivedFuture = new MemoizedSupplier<>(() -> aIo.getFuture().thenCombine(bIo.getFuture(), (a, b) -> {
+            value = func.apply(a, b);
+            return value;
+        }));
+    }
+
     @Override
     boolean isValueSet() {
         return value != null;
@@ -79,5 +128,13 @@ public final class TaskOutput<T> extends TaskIO<T> {
      */
     public boolean isComputed() {
         return isComputed;
+    }
+
+    /**
+     * @return If this Output is a derived output, retrieves the future to compute the
+     * derived output, otherwise null.
+     */
+    @Nullable CompletableFuture<?> deriveFuture() {
+        return derivedFuture != null ? derivedFuture.get() : null;
     }
 }

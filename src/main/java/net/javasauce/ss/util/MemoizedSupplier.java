@@ -6,7 +6,7 @@ import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
 
-public class MemoizedSupplier<T extends @Nullable Object> implements Supplier<T> {
+public class MemoizedSupplier<T> implements Supplier<T> {
 
     private volatile @Nullable Supplier<T> delegate;
     @Nullable T value;
@@ -17,10 +17,10 @@ public class MemoizedSupplier<T extends @Nullable Object> implements Supplier<T>
 
     @Override
     public T get() {
-        if (delegate == null) return value;
+        if (delegate == null) return requireNonNull(value);
         synchronized (this) {
             // standard double latch
-            if (delegate == null) return value;
+            if (delegate == null) return requireNonNull(value);
 
             T t = requireNonNull(delegate).get();
             value = t;

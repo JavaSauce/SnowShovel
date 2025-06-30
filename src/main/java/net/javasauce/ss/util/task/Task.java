@@ -8,10 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ForkJoinPool;
@@ -31,6 +28,9 @@ import java.util.function.Supplier;
  * not be re-run. Note: It's important to ensure your outputs are included in the cache,
  * otherwise your task may not re-run when it's missing.
  * <p>
+ * Tasks may declare 'inner' tasks via {@link #declareCompositeTask}, these tasks copy any
+ * explicit dependencies their outer has/will have, and are marked as explicit dependencies of their outer.
+ * <p>
  * Created by covers1624 on 6/24/25.
  */
 public abstract class Task {
@@ -47,6 +47,7 @@ public abstract class Task {
     private @Nullable Supplier<TaskCacheBuilder> cache;
 
     private final List<Task> dependsOn = new ArrayList<>();
+    private final List<Task> innerTasks = new ArrayList<>();
 
     /**
      * @param name     The name for this task, used for logging.
@@ -198,6 +199,23 @@ public abstract class Task {
      */
     public void dependsOn(Iterable<Task> tasks) {
         tasks.forEach(dependsOn::add);
+
+        innerTasks.forEach(task -> task.dependsOn(tasks));
+    }
+
+    /**
+     * Declare the given task execute before this task.
+     * <p>
+     * The given task will copy all explicit dependencies of this task, however,
+     * will not automatically copy any implicit dependencies handed through IO variables.
+     * The given task will need to either derive its own inputs from the inputs of the outer, or
+     * copy the outers inputs.
+     */
+    //TODO, we probably need to have an easy safeguard to prevent the inner task declaring a dependency on
+    //      the outer task via its outputs, as this will create a deadlock.
+    protected void declareCompositeTask(Task task) {
+        task.dependsOn(dependsOn);
+        innerTasks.add(task);
     }
 
     /**
@@ -209,8 +227,9 @@ public abstract class Task {
         if (taskFuture == null) {
             var inputFuture = CompletableFuture.allOf(
                     FastStream.concat(
-                                    FastStream.of(inputs).map(TaskIO::getFuture),
-                                    FastStream.of(dependsOn).map(Task::getFuture)
+                                    FastStream.of(dependsOn).map(Task::getFuture),
+                                    FastStream.of(outputs).map(TaskOutput::deriveFuture).filter(Objects::nonNull),
+                                    FastStream.of(inputs).map(TaskIO::getFuture)
                             )
                             .toArray(CompletableFuture[]::new)
             );
