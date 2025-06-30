@@ -17,9 +17,15 @@ import net.covers1624.quack.io.CopyingFileVisitor;
 import net.covers1624.quack.maven.MavenNotation;
 import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.tasks.*;
+import net.javasauce.ss.tasks.git.CheckoutBranchTask;
+import net.javasauce.ss.tasks.git.CommitAndTagTask;
 import net.javasauce.ss.tasks.report.DiscordReportTask;
 import net.javasauce.ss.tasks.report.GenerateReportTask;
 import net.javasauce.ss.tasks.report.TestCaseDef;
+import net.javasauce.ss.tasks.util.BarrierTask;
+import net.javasauce.ss.tasks.util.CopyTask;
+import net.javasauce.ss.tasks.util.GenerateGradleProjectTask;
+import net.javasauce.ss.tasks.util.SetupJdkTask;
 import net.javasauce.ss.util.*;
 import net.javasauce.ss.util.task.Task;
 import org.apache.commons.io.FilenameUtils;
@@ -205,6 +211,13 @@ public class SnowShovel implements AutoCloseable {
             .build()
     );
 
+    // Single thread executor to ensure all git operations happen sequentially.
+    private final ExecutorService gitExecutor = Executors.newSingleThreadExecutor(new BasicThreadFactory.Builder()
+            .namingPattern("Git Thread")
+            .daemon(true)
+            .build()
+    );
+
     public final String gitRepo;
     public final Path workDir;
     public final boolean shouldPush;
@@ -292,11 +305,18 @@ public class SnowShovel implements AutoCloseable {
             task.toolDir.set(toolsDir);
         });
 
+        var downloadGradleWrapper = NewDownloadTask.create("downloadGradleWrapper", downloadExecutor, http, task -> {
+            task.output.set(librariesDir.resolve("GradleWrapper.zip"));
+            task.url.set("https://covers1624.net/Files/GradleWrapper-8.10.2.zip");
+            task.downloadLen.set(44825L);
+            task.downloadHash.set(Optional.of("2e355d2ede2307bfe40330db29f52b9b729fd9b2"));
+        });
+
         Map<LibraryTasks.LibraryDownload, NewDownloadTask> libraryDownloads = new HashMap<>();
 
-        List<DecompileTask> decompileTasks = new ArrayList<>();
-        for (ProcessableVersion process : toProcess) {
-            var manifest = process.manifest;
+        var gitTagAllBarrier = new BarrierTask("gitTagAllBarrier");
+        for (ProcessableVersion version : toProcess) {
+            var manifest = version.manifest;
             var id = manifest.id();
 
             var downloadClient = NewDownloadTask.create("downloadClient_" + id, downloadExecutor, http, task -> {
@@ -323,7 +343,8 @@ public class SnowShovel implements AutoCloseable {
                 task.remapped.set(versionsDir.resolve(id).resolve(id + "-client-remapped.jar"));
             });
 
-            List<NewDownloadTask> libraries = FastStream.of(LibraryTasks.getVersionLibraries(manifest, librariesDir))
+            var libDefs = LibraryTasks.getVersionLibraries(manifest, librariesDir);
+            List<NewDownloadTask> libraries = FastStream.of(libDefs)
                     .map(library -> libraryDownloads.computeIfAbsent(library, e2 ->
                             NewDownloadTask.create("downloadLibrary_" + library.notation(), downloadExecutor, http, task -> {
                                 task.url.set(library.url());
@@ -333,17 +354,50 @@ public class SnowShovel implements AutoCloseable {
                             })))
                     .toList();
 
-            var decompileTask = DecompileTask.create("decompile_" + id, decompileExecutor, jdkProvider, task -> {
+            var decompileTask = DecompileTask.create("decompile_" + id, decompileExecutor, task -> {
                 task.javaHome.set(getJdkTask(manifest.computeJavaVersion()).javaHome);
                 task.tool.set(prepareDecompiler.output);
                 task.libraries.set(FastStream.of(libraries).map(e -> e.output).toList());
                 task.inputJar.set(remapClient.remapped);
-                task.output.set(tempDir.resolve(id).resolve("decompiled.zip"));
-                task.statsOutput.set(tempDir.resolve(id).resolve("test_stats.json"));
+                task.output.set(tempDir.resolve(id));
             });
-            decompileTasks.add(decompileTask);
+
+            var branchName = branchNameForVersion(manifest);
+            var checkoutBranchTask = CheckoutBranchTask.create("checkout_" + id, gitExecutor, task -> {
+                task.dependsOn(decompileTask);
+                task.git.set(git);
+                task.branch.set(branchName);
+                task.clean.set(true);
+            });
+
+            var copyTask = CopyTask.create("copyDecompileResults_" + id, gitExecutor, task -> {
+                task.dependsOn(checkoutBranchTask);
+                task.input.set(decompileTask.output);
+                task.output.set(repoDir);
+            });
+
+            // TODO we can run this in parallel with copy, but not due to the executors they use.
+            //      We can probably also move away from using a gradle wrapper dist zip now, and just run gradle to gen a wrapper
+            //      we only ever used the dist zip because it was faster than stalling the program waiting for Gradle.
+            var genProjectTask = GenerateGradleProjectTask.create("generateGradleProject_" + id, gitExecutor, task -> {
+                task.dependsOn(checkoutBranchTask);
+                task.projectDir.set(repoDir);
+                task.gradleWrapperDist.set(downloadGradleWrapper.output);
+                task.javaVersion.set(manifest.computeJavaVersion());
+                task.libraries.set(libDefs);
+                task.mcVersion.set(id);
+            });
+
+            var commitTask = CommitAndTagTask.create("commitAndTag_" + id, gitExecutor, task -> {
+                task.dependsOn(copyTask);
+                task.dependsOn(genProjectTask);
+                task.git.set(git);
+                task.commitMessage.set(version.commitName);
+                task.tagName.set("temp/" + branchName);
+            });
+            gitTagAllBarrier.dependsOn(commitTask);
         }
-        Task.runTasks(decompileTasks);
+        Task.runTasks(List.of(gitTagAllBarrier));
     }
 
     private SetupJdkTask getJdkTask(JavaVersion javaVersion) {
@@ -781,6 +835,7 @@ public class SnowShovel implements AutoCloseable {
         downloadExecutor.close();
         remapperExecutor.close();
         decompileExecutor.close();
+        gitExecutor.close();
     }
 
     public record RunRequest(
