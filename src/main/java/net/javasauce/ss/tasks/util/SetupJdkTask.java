@@ -37,7 +37,7 @@ public class SetupJdkTask extends Task {
 
     @Override
     protected void execute() throws Throwable {
-        LOGGER.info("Setting up jdk for {}", javaVersion);
+        LOGGER.info("Setting up jdk for {}", javaVersion.get());
         var home = provider.findOrProvisionJdk(javaVersion.get());
         LOGGER.info("Selected jdk {}", home);
         javaHome.set(home);
