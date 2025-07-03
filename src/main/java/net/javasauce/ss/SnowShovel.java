@@ -19,6 +19,8 @@ import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.tasks.*;
 import net.javasauce.ss.tasks.git.CheckoutBranchTask;
 import net.javasauce.ss.tasks.git.CommitAndTagTask;
+import net.javasauce.ss.tasks.git.ExtractTestStatsTask;
+import net.javasauce.ss.tasks.git.FastForwardTask;
 import net.javasauce.ss.tasks.report.DiscordReportTask;
 import net.javasauce.ss.tasks.report.GenerateReportTask;
 import net.javasauce.ss.tasks.report.TestCaseDef;
@@ -27,7 +29,6 @@ import net.javasauce.ss.tasks.util.CopyTask;
 import net.javasauce.ss.tasks.util.GenerateGradleProjectTask;
 import net.javasauce.ss.tasks.util.SetupJdkTask;
 import net.javasauce.ss.util.*;
-import net.javasauce.ss.util.task.Task;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.eclipse.jgit.api.Git;
@@ -289,16 +290,17 @@ public class SnowShovel implements AutoCloseable {
         preTestStats.putAll(pullStatsFromBranches());
         testStats.putAll(preTestStats);
 
-        var prepareRemapper = PrepareToolTask.create("prepareRemapper", downloadExecutor, http, task -> {
-            task.notation.set(MavenNotation.parse("net.covers1624:FastRemapper:0.3.2.19@zip"));
-            task.toolDir.set(toolsDir);
-        });
-
         var toProcess = prepareRequestedVersions(runRequest.versions)
                 .toList();
         var decompilerVersion = decompilerOverride
                 .or(() -> Optional.ofNullable(runRequest.decompilerVersion))
                 .orElseGet(decompiler::findLatest);
+
+        // Stage 2
+        var prepareRemapper = PrepareToolTask.create("prepareRemapper", downloadExecutor, http, task -> {
+            task.notation.set(MavenNotation.parse("net.covers1624:FastRemapper:0.3.2.19@zip"));
+            task.toolDir.set(toolsDir);
+        });
 
         var prepareDecompiler = PrepareToolTask.create("prepareDecompiler", downloadExecutor, http, task -> {
             task.notation.set(MavenNotation.parse("net.javasauce:Decompiler:0:testframework@zip").withVersion(decompilerVersion));
@@ -397,7 +399,43 @@ public class SnowShovel implements AutoCloseable {
             });
             gitTagAllBarrier.dependsOn(commitTask);
         }
-        Task.runTasks(List.of(gitTagAllBarrier));
+
+
+        // Stage 3
+        var fastForwardMain = FastForwardTask.create("fastForwardMain", gitExecutor, task -> {
+            task.dependsOn(gitTagAllBarrier);
+            task.git.set(git);
+            task.branch.set("main");
+            task.tag.set(Optional.of("temp/main"));
+        });
+
+        var preStats = ExtractTestStatsTask.create("preFFExtractTestStats", gitExecutor, task -> {
+            task.dependsOn(fastForwardMain);
+            task.git.set(git);
+            task.checkOrigin.set(true);
+        });
+
+        var fastForwardBarrier = new BarrierTask("fastForwardBarrier");
+        for (var version : toProcess) {
+            var branch = branchNameForVersion(version.manifest);
+            var fastForward = FastForwardTask.create("fastForward_" + version.manifest.id(), gitExecutor, task -> {
+                task.dependsOn(preStats);
+                task.git.set(git);
+                task.branch.set(branch);
+                task.tag.set(Optional.of("temp/" + branch));
+            });
+            fastForwardBarrier.dependsOn(fastForward);
+        }
+
+        var postStats = ExtractTestStatsTask.create("postExtractTestStats", gitExecutor, task -> {
+            task.dependsOn(fastForwardBarrier);
+            task.dependsOn(fastForwardMain);
+            task.git.set(git);
+            task.checkOrigin.set(false);
+        });
+
+        // TODO
+//        Task.runTasks(List.of(gitTagAllBarrier));
     }
 
     private SetupJdkTask getJdkTask(JavaVersion javaVersion) {
