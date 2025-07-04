@@ -50,7 +50,8 @@ public class RemapperTasks {
                         "--fix-locals",
                         "--fix-source",
                         "--fix-ctor-anns",
-                        "--fix-stripped-ctors"
+                        "--fix-stripped-ctors",
+                        "--fix-record-ctor-param-names"
                 ),
                 remapperJar.getParent(),
                 LOGGER::info

@@ -325,7 +325,7 @@ public class SnowShovel implements AutoCloseable {
 
         var toProcess = prepareRequestedMatrixVersions(FastStream.of(config.versions))
                 .toList();
-        fastRemapper.resolveWithVersion("0.3.2.18");
+        fastRemapper.resolveWithVersion("0.3.2.20");
         decompiler.resolveWithVersion(config.decompilerVersion);
         LOGGER.info("Found {} versions to process.", toProcess.size());
         int i = 0;
