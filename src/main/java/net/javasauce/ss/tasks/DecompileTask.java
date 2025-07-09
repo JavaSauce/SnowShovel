@@ -46,6 +46,10 @@ public class DecompileTask extends Task {
     protected void execute() throws Throwable {
         var output = this.output.get();
 
+        List<Path> libraryPath = new ArrayList<>();
+        libraryPath.add(inputJar.get());
+        libraryPath.addAll(libraries.get());
+
         var tool = this.tool.get();
         var procResult = ProcessUtils.runProcess(
                 JavaInstall.getJavaExecutable(javaHome.get(), true),
@@ -59,7 +63,7 @@ public class DecompileTask extends Task {
                         "-Dcoffeegrinder.test.rt_diff_output=" + output.resolve("src/main/java").toAbsolutePath(),
                         "-Dcoffeegrinder.test.stats=" + output.resolve("src/main/resources/test_stats.json").toAbsolutePath(),
                         "-Dcoffeegrinder.test.classes=" + inputJar.get().toAbsolutePath(),
-                        "-Dcoffeegrinder.test.libraries=" + FastStream.of(libraries.get())
+                        "-Dcoffeegrinder.test.libraries=" + FastStream.of(libraryPath)
                                 .map(Path::toAbsolutePath)
                                 .map(Path::toString)
                                 .join(File.pathSeparator),
