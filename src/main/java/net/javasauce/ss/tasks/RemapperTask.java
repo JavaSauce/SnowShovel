@@ -72,7 +72,8 @@ public class RemapperTask extends Task {
                         "--fix-locals",
                         "--fix-source",
                         "--fix-ctor-anns",
-                        "--fix-stripped-ctors"
+                        "--fix-stripped-ctors",
+                        "--fix-record-ctor-param-names"
                 ),
                 tool.workingDir(),
                 LOGGER::info

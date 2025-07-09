@@ -298,7 +298,7 @@ public class SnowShovel implements AutoCloseable {
 
         // Stage 2
         var prepareRemapper = PrepareToolTask.create("prepareRemapper", downloadExecutor, http, task -> {
-            task.notation.set(MavenNotation.parse("net.covers1624:FastRemapper:0.3.2.19@zip"));
+            task.notation.set(MavenNotation.parse("net.covers1624:FastRemapper:0.3.2.20@zip"));
             task.toolDir.set(toolsDir);
         });
 
