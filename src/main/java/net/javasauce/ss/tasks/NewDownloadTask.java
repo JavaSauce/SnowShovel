@@ -1,5 +1,6 @@
 package net.javasauce.ss.tasks;
 
+import net.covers1624.quack.io.IOUtils;
 import net.covers1624.quack.net.HttpEngineDownloadAction;
 import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.covers1624.quack.util.SneakyUtils.ThrowingConsumer;
@@ -71,7 +72,7 @@ public class NewDownloadTask extends Task {
         var override = localOverride.get().orElse(null);
 
         if (override != null) {
-            Files.copy(override, output, StandardCopyOption.REPLACE_EXISTING);
+            Files.copy(override, IOUtils.makeParents(output), StandardCopyOption.REPLACE_EXISTING);
             if (validate(output, downloadLen, downloadHash)) {
                 LOGGER.info("Using local override for download of {}", output);
                 return;
