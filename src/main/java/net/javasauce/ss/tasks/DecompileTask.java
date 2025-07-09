@@ -59,7 +59,7 @@ public class DecompileTask extends Task {
                         "-Dcoffeegrinder.testcases.library.update_defs=true",
                         "-Dcoffeegrinder.test.update=true",
                         "-Dcoffeegrinder.test.output=" + output.resolve("src/main/java").toAbsolutePath(),
-                        "-Dcoffeegrinder.test.compile_error_output=" + output.resolveSibling("src/main/java").toAbsolutePath(),
+                        "-Dcoffeegrinder.test.compile_error_output=" + output.resolve("src/main/java").toAbsolutePath(),
                         "-Dcoffeegrinder.test.rt_diff_output=" + output.resolve("src/main/java").toAbsolutePath(),
                         "-Dcoffeegrinder.test.stats=" + output.resolve("src/main/resources/test_stats.json").toAbsolutePath(),
                         "-Dcoffeegrinder.test.classes=" + inputJar.get().toAbsolutePath(),
