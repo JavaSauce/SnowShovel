@@ -50,6 +50,7 @@ public class NewDownloadTask extends Task {
             cache.add(url);
             cache.add(downloadHash);
             cache.add(downloadLen);
+            cache.add(localOverride);
         });
     }
 
