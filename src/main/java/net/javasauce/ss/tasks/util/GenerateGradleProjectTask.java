@@ -3,9 +3,7 @@ package net.javasauce.ss.tasks.util;
 import net.covers1624.jdkutils.JavaVersion;
 import net.covers1624.quack.io.IndentPrintWriter;
 import net.javasauce.ss.tasks.LibraryTasks;
-import net.javasauce.ss.tasks.report.GenerateReportTask;
 import net.javasauce.ss.tasks.report.TestCaseDef;
-import net.javasauce.ss.util.task.Task;
 import net.javasauce.ss.util.task.TaskInput;
 import org.jetbrains.annotations.Nullable;
 
@@ -14,13 +12,14 @@ import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
 /**
  * Created by covers1624 on 6/29/25.
  */
-public class GenerateGradleProjectTask extends Task {
+public class GenerateGradleProjectTask extends GenProjectTask {
 
     public final TaskInput<Path> projectDir = input("projectDir");
     public final TaskInput<Path> gradleWrapperDist = input("gradleWrapperDist");
@@ -151,7 +150,7 @@ public class GenerateGradleProjectTask extends Task {
                 Output of SnowShovel
                 """;
         if (testStats != null) {
-            readme += GenerateReportTask.generateReport(List.of(new GenerateReportTask.ReportPair(mcVersion, testStats)));
+            readme += generateReport(Map.of(mcVersion, testStats));
         }
         return readme;
     }

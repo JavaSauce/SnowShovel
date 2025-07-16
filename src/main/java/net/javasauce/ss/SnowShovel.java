@@ -22,13 +22,11 @@ import net.javasauce.ss.tasks.git.CommitAndTagTask;
 import net.javasauce.ss.tasks.git.ExtractTestStatsTask;
 import net.javasauce.ss.tasks.git.FastForwardTask;
 import net.javasauce.ss.tasks.report.DiscordReportTask;
-import net.javasauce.ss.tasks.report.GenerateReportTask;
+import net.javasauce.ss.tasks.report.GenerateComparisonsTask;
 import net.javasauce.ss.tasks.report.TestCaseDef;
-import net.javasauce.ss.tasks.util.BarrierTask;
-import net.javasauce.ss.tasks.util.CopyTask;
-import net.javasauce.ss.tasks.util.GenerateGradleProjectTask;
-import net.javasauce.ss.tasks.util.SetupJdkTask;
+import net.javasauce.ss.tasks.util.*;
 import net.javasauce.ss.util.*;
+import net.javasauce.ss.util.task.Task;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.eclipse.jgit.api.Git;
@@ -48,6 +46,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ForkJoinPool;
 
 import static java.util.List.of;
 
@@ -184,6 +183,8 @@ public class SnowShovel implements AutoCloseable {
             .create();
     private static final Gson GSON_MINIFIED = new GsonBuilder().create();
     private static final Type MAP_STRING_TYPE = new TypeToken<Map<String, String>>() { }.getType();
+
+    private static final @Nullable String DISCORD_WEBHOOK = System.getenv("DISCORD_WEBHOOK");
 
     private static final String TAG_SNOW_SHOVEL_VERSION = "SnowShovelVersion";
     private static final String TAG_DECOMPILER_VERSION = "DecompilerVersion";
@@ -399,18 +400,13 @@ public class SnowShovel implements AutoCloseable {
             });
             gitTagAllBarrier.dependsOn(commitTask);
         }
-
+        // TODO, Stage 2 needs to have an optional push task as a barrier.
 
         // Stage 3
-        var fastForwardMain = FastForwardTask.create("fastForwardMain", gitExecutor, task -> {
-            task.dependsOn(gitTagAllBarrier);
-            task.git.set(git);
-            task.branch.set("main");
-            task.tag.set(Optional.of("temp/main"));
-        });
 
         var preStats = ExtractTestStatsTask.create("preFFExtractTestStats", gitExecutor, task -> {
-            task.dependsOn(fastForwardMain);
+            // TODO give this the version list and guarentee the versions are extracted.
+            task.dependsOn(gitTagAllBarrier);
             task.git.set(git);
             task.checkOrigin.set(true);
         });
@@ -427,15 +423,51 @@ public class SnowShovel implements AutoCloseable {
             fastForwardBarrier.dependsOn(fastForward);
         }
 
-        var postStats = ExtractTestStatsTask.create("postExtractTestStats", gitExecutor, task -> {
+        var fastForwardMain = FastForwardTask.create("fastForwardMain", gitExecutor, task -> {
             task.dependsOn(fastForwardBarrier);
+            task.git.set(git);
+            task.branch.set("main");
+            task.tag.set(Optional.of("temp/main"));
+        });
+
+        var postStats = ExtractTestStatsTask.create("postFFExtractTestStats", gitExecutor, task -> {
+            // TODO give this the version list and guarentee the versions are extracted.
             task.dependsOn(fastForwardMain);
             task.git.set(git);
             task.checkOrigin.set(false);
         });
 
-        // TODO
-//        Task.runTasks(List.of(gitTagAllBarrier));
+        var genRootProject = GenerateRootProjectTask.create("genRootProject", ForkJoinPool.commonPool(), task -> {
+            task.dependsOn(fastForwardMain);
+            task.projectDir.set(repoDir);
+//            task.versions.set(); // TODO we need the full version list here.
+            task.testDefs.set(postStats.testStats);
+        });
+
+        var pushBarrier = new BarrierTask("pushBarrier");
+
+        // TODO push task here
+
+        var discordPostBarrier = new BarrierTask("discordPostBarrier");
+        if (DISCORD_WEBHOOK != null) {
+            var genComparisons = GenerateComparisonsTask.create("genComparisons", ForkJoinPool.commonPool(), task -> {
+                task.dependsOn(pushBarrier);
+                task.preStats.set(preStats.testStats);
+                task.postStats.set(postStats.testStats);
+            });
+
+            var discordReport = DiscordReportTask.create("discordReport", ForkJoinPool.commonPool(), task -> {
+                task.webhook.set(DISCORD_WEBHOOK);
+                task.gitRepoUrl.set(gitRepo);
+                task.http.set(http);
+//                task.versions.set(); // TODO we need the full version list here.
+                task.postDefs.set(postStats.testStats);
+                task.comparisons.set(genComparisons.comparisons);
+            });
+            discordPostBarrier.dependsOn(discordReport);
+        }
+
+        Task.runTasks(List.of(pushBarrier, discordPostBarrier));
     }
 
     private SetupJdkTask getJdkTask(JavaVersion javaVersion) {
@@ -470,7 +502,7 @@ public class SnowShovel implements AutoCloseable {
             var commit = GitTasks.stageAndCommit(git, version.commitName);
 
             if (stats != null) {
-                testStats.put(manifest.id(), new CommittedTestCaseDef(commit, stats));
+                testStats.put(manifest.id(), new CommittedTestCaseDef(commit, version.commitName, stats));
             }
             commitTitles.put(manifest.id(), version.commitName);
         }
@@ -486,9 +518,8 @@ public class SnowShovel implements AutoCloseable {
             GitTasks.pushAllBranches(git);
         }
 
-        String webhook = System.getenv("DISCORD_WEBHOOK");
-        if (webhook != null) {
-            DiscordReportTask.generateReports(this, webhook, preTestStats, testStats, commitTitles, toProcess.size(), runRequest.reason);
+        if (DISCORD_WEBHOOK != null) {
+            DiscordReportTask.generateReports(this, DISCORD_WEBHOOK, preTestStats, testStats, commitTitles, toProcess.size(), runRequest.reason);
         }
     }
 
@@ -598,11 +629,10 @@ public class SnowShovel implements AutoCloseable {
             GitTasks.pushDeleteTags(git, tagsToDelete);
         }
 
-        String webhook = System.getenv("DISCORD_WEBHOOK");
-        if (webhook != null) {
+        if (DISCORD_WEBHOOK != null) {
             DiscordReportTask.generateReports(
                     this,
-                    webhook,
+                    DISCORD_WEBHOOK,
                     preTestStats,
                     testStats,
                     commitTitles,
@@ -641,7 +671,7 @@ public class SnowShovel implements AutoCloseable {
             GitTasks.loadBlob(git, entry.getValue() + ":src/main/resources/test_stats.json", stream -> {
                 defs.put(
                         entry.getKey(),
-                        new CommittedTestCaseDef(entry.getValue(), TestCaseDef.loadTestStats(stream))
+                        new CommittedTestCaseDef(entry.getValue(), GitTasks.getCommitMessage(git, entry.getValue()), TestCaseDef.loadTestStats(stream))
                 );
             });
         }
@@ -853,10 +883,10 @@ public class SnowShovel implements AutoCloseable {
                 # Shoveled
                 Output of SnowShovel
                 """;
-        readme += GenerateReportTask.generateReport(
+        readme += GenerateComparisonsTask.generateReport(
                 FastStream.of(VersionManifestTasks.allVersions(this).reversed())
                         .filter(e -> testStats.containsKey(e.id()))
-                        .map(e -> new GenerateReportTask.ReportPair(e.id(), testStats.get(e.id()).def()))
+                        .map(e -> new GenerateComparisonsTask.ReportPair(e.id(), testStats.get(e.id()).def()))
                         .toList()
         );
 

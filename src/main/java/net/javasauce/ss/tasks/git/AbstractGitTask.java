@@ -10,6 +10,7 @@ import org.eclipse.jgit.api.ListBranchCommand;
 import org.eclipse.jgit.api.MergeCommand;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.lib.*;
+import org.eclipse.jgit.revwalk.RevWalk;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -227,6 +228,15 @@ public abstract class AbstractGitTask extends Task {
                 .call();
         if (!merge.getMergeStatus().isSuccessful()) {
             throw new RuntimeException("Unable to fast forward branch. " + merge.getMergeStatus());
+        }
+    }
+
+    protected String getCommitMessage(String ref) {
+        var repo = git.get().getRepository();
+        try (RevWalk walk = new RevWalk(repo)) {
+            return walk.parseCommit(repo.resolve(ref)).getFullMessage();
+        } catch (IOException ex) {
+            throw new RuntimeException("Failed to get commit message of ref.", ex);
         }
     }
 }

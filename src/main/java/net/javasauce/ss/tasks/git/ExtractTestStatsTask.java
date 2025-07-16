@@ -46,7 +46,7 @@ public class ExtractTestStatsTask extends AbstractGitTask {
             var testDefs = loadBlob(entry.getValue() + ":src/main/resources/test_stats.json", TestCaseDef::loadTestStats);
             if (testDefs == null) continue;
 
-            defs.put(entry.getKey(), new CommittedTestCaseDef(entry.getValue(), testDefs));
+            defs.put(entry.getKey(), new CommittedTestCaseDef(entry.getValue(), getCommitMessage(entry.getValue()), testDefs));
         }
 
         testStats.set(defs);

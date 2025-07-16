@@ -5,7 +5,7 @@ import net.covers1624.quack.io.IOUtils;
 import net.covers1624.quack.io.IndentPrintWriter;
 import net.javasauce.ss.SnowShovel;
 import net.javasauce.ss.tasks.LibraryTasks.LibraryDownload;
-import net.javasauce.ss.tasks.report.GenerateReportTask;
+import net.javasauce.ss.tasks.report.GenerateComparisonsTask;
 import net.javasauce.ss.tasks.report.TestCaseDef;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -131,7 +131,7 @@ public class ProjectTasks {
                 Output of SnowShovel
                 """;
         if (testStats != null) {
-            readme += GenerateReportTask.generateReport(List.of(new GenerateReportTask.ReportPair(mcVersion, testStats)));
+            readme += GenerateComparisonsTask.generateReport(List.of(new GenerateComparisonsTask.ReportPair(mcVersion, testStats)));
         }
 
         Files.writeString(projectDir.resolve("README.md"), readme);

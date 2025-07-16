@@ -198,8 +198,7 @@ public class GitTasks {
     public static String stageAndAmend(Git git) {
         LOGGER.info("Amending changes.");
         stageChanges(git);
-        var repo = git.getRepository();
-        try (RevWalk walk = new RevWalk(repo)) {
+        try {
             var rev = git.commit()
                     .setAmend(true)
                     .setMessage(getCommitMessage(git, Constants.HEAD))
