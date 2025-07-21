@@ -4,9 +4,7 @@ import net.covers1624.quack.collection.FastStream;
 import net.covers1624.quack.maven.MavenNotation;
 import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.SnowShovel;
-import net.javasauce.ss.util.ProcessableVersionSet;
-import net.javasauce.ss.util.RepoProperties;
-import net.javasauce.ss.util.ToolUtils;
+import net.javasauce.ss.util.*;
 import net.javasauce.ss.util.task.Task;
 import net.javasauce.ss.util.task.TaskInput;
 import net.javasauce.ss.util.task.TaskOutput;
@@ -61,7 +59,7 @@ public class DetectChangesTask extends Task {
             request = detectAutomaticChanges(versionSet);
             if (request != null) {
                 repoProperties.setValue(RepoProperties.TAG_SNOW_SHOVEL_VERSION, SnowShovel.VERSION);
-                repoProperties.setValue(RepoProperties.TAG_DECOMPILER_VERSION, request.decompilerVersion); // TODO tighten the nullability here
+                repoProperties.setValue(RepoProperties.TAG_DECOMPILER_VERSION, request.decompilerVersion());
             }
         } else {
             LOGGER.info("Running in Manual mode. Re-processing everything.");
@@ -162,14 +160,4 @@ public class DetectChangesTask extends Task {
         );
     }
 
-    public record RunRequest(
-            String reason,
-            String decompilerVersion,
-            List<VersionRequest> versions
-    ) { }
-
-    public record VersionRequest(
-            String id,
-            String commitName
-    ) { }
 }

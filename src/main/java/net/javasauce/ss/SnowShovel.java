@@ -94,7 +94,6 @@ public class SnowShovel {
             .build()
     );
 
-
     private static final Map<JavaVersion, SetupJdkTask> JDK_TASKS = new HashMap<>();
 
     public static final String VERSION;
