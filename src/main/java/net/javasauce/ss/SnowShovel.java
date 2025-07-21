@@ -224,7 +224,7 @@ public class SnowShovel {
             task.simulateFullRun.set(simulateFullRun);
         });
 
-        Task.runTasks(List.of(detectChanges));
+        Task.runTasks(detectChanges);
 
         // Stage 1.5, Check if redundant, tag main with cache.
         var runRequest = detectChanges.runRequest.get().orElse(null);
@@ -237,7 +237,7 @@ public class SnowShovel {
             task.commitMessage.set(Optional.of(runRequest.reason()));
             task.tagName.set(Optional.of("temp/main"));
         });
-        Task.runTasks(List.of(tempTagMain));
+        Task.runTasks(tempTagMain);
 
         // TODO split here, gen matrix ends here, use matrix starts.
 
@@ -434,7 +434,7 @@ public class SnowShovel {
             discordPostBarrier.dependsOn(discordReport);
         }
 
-        Task.runTasks(List.of(pushBarrier, discordPostBarrier));
+        Task.runTasks(pushBarrier, discordPostBarrier);
 
         gitSetupTask.output.get().close();
         DOWNLOAD_EXECUTOR.close();

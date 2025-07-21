@@ -67,6 +67,15 @@ public abstract class Task {
      *
      * @param tasks The tasks to run.
      */
+    public static void runTasks(Task... tasks) {
+        runTasks(Arrays.asList(tasks));
+    }
+
+    /**
+     * Schedule the given tasks and wait for them to complete.
+     *
+     * @param tasks The tasks to run.
+     */
     public static void runTasks(Iterable<? extends Task> tasks) {
         var futures = FastStream.of(tasks)
                 .map(Task::getFuture)
