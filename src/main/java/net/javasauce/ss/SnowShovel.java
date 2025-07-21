@@ -19,6 +19,7 @@ import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.tasks.*;
 import net.javasauce.ss.tasks.detect.DetectChangesTask;
 import net.javasauce.ss.tasks.git.*;
+import net.javasauce.ss.tasks.matrix.GenMatrixTask;
 import net.javasauce.ss.tasks.report.DiscordReportTask;
 import net.javasauce.ss.tasks.report.GenerateComparisonsTask;
 import net.javasauce.ss.tasks.report.TestCaseDef;
@@ -237,6 +238,30 @@ public class SnowShovel {
             task.tagName.set(Optional.of("temp/main"));
         });
         Task.runTasks(tempTagMain);
+
+        if (optSet.has(genMatrixOpt)) {
+            var size = optSet.valueOf(matrixSizeOpt);
+            var output = optSet.valueOf(genMatrixOpt);
+            var genMatrix = GenMatrixTask.create("genMatrix", ForkJoinPool.commonPool(), task -> {
+                task.runRequest.set(runRequest);
+                task.matrixSize.set(size);
+                task.output.set(output);
+            });
+
+            var pushBarrier = new BarrierTask("pushBarrier");
+            pushBarrier.dependsOn(genMatrix);
+
+            if (shouldPush) {
+                var pushTask = PushAllTask.create("pushAllTags", GIT_EXECUTOR, task -> {
+                    task.tags.set(true);
+                });
+                pushBarrier.dependsOn(pushTask);
+            }
+
+            Task.runTasks(pushBarrier);
+            // TODO close git and the executors.
+            return;
+        }
 
         // TODO split here, gen matrix ends here, use matrix starts.
 
