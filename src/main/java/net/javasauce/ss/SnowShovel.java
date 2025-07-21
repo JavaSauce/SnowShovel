@@ -465,23 +465,37 @@ public class SnowShovel {
     @Deprecated
     private final Map<String, String> commitTitles = new HashMap<>();
 
+    @Deprecated
     public String gitRepo;
+    @Deprecated
     public Path workDir;
+    @Deprecated
     public boolean shouldPush;
+    @Deprecated
     public boolean shouldClean;
 
+    @Deprecated
     public Optional<String> decompilerOverride;
+    @Deprecated
     public List<String> mcVersionsOverride;
 
+    @Deprecated
     public Path versionsDir;
+    @Deprecated
     public Path librariesDir;
+    @Deprecated
     public Path toolsDir;
+    @Deprecated
     public Path tempDir;
 
+    @Deprecated
     public Path repoDir;
+    @Deprecated
     public Path cacheDir;
 
+    @Deprecated
     public HttpEngine http;
+    @Deprecated
     public JdkProvider jdkProvider;
 
     @Deprecated
@@ -492,6 +506,7 @@ public class SnowShovel {
     @Deprecated
     public Git git;
 
+    @Deprecated
     private void run(RunRequest runRequest) throws IOException {
         preTestStats.putAll(pullStatsFromBranches());
         testStats.putAll(preTestStats);
@@ -537,6 +552,7 @@ public class SnowShovel {
         }
     }
 
+    @Deprecated
     private void runGenMatrix(RunRequest runRequest, int size, Path matrixOutput) throws IOException {
         var decompilerVersion = decompilerOverride
                 .or(() -> Optional.ofNullable(runRequest.decompilerVersion))
@@ -572,6 +588,7 @@ public class SnowShovel {
         }
     }
 
+    @Deprecated
     private void runUseMatrix(Path matrixInput) throws IOException {
         MatrixJobConfig config = JsonUtils.parse(GSON, matrixInput, MatrixJobConfig.class);
 
@@ -600,6 +617,7 @@ public class SnowShovel {
         }
     }
 
+    @Deprecated
     private void runFinalizeMatrix(Path matrixInput) throws IOException {
         JobMatrix config = JsonUtils.parse(GSON, matrixInput, JobMatrix.class);
 
@@ -656,6 +674,7 @@ public class SnowShovel {
         }
     }
 
+    @Deprecated
     private void fastForwardMainToTempTag() {
         var tag = FastStream.of(GitTasks.listAllTags(git))
                 .filter(e -> e.name().equals("temp/main"))
@@ -665,10 +684,12 @@ public class SnowShovel {
         GitTasks.fastForwardBranchToCommit(git, "main", tag.commit());
     }
 
+    @Deprecated
     private Map<String, CommittedTestCaseDef> pullStatsFromBranches() throws IOException {
         return pullStatsFromBranches(false);
     }
 
+    @Deprecated
     private Map<String, CommittedTestCaseDef> pullStatsFromBranches(boolean tryOrigin) throws IOException {
         var branches = GitTasks.listAllBranches(git);
 
@@ -692,12 +713,14 @@ public class SnowShovel {
         return defs;
     }
 
+    @Deprecated
     private static void parseBranchToId(String branch, String commit, Map<String, String> idToCommit) {
         if (branch.startsWith("release/") || branch.startsWith("snapshot/")) {
             idToCommit.put(branch.replace("release/", "").replace("snapshot/", ""), commit);
         }
     }
 
+    @Deprecated
     private RunRequest manualAllVersionsRun() throws IOException {
         LOGGER.info("Running in Manual mode. Re-processing everything.");
         return new RunRequest(
@@ -707,6 +730,7 @@ public class SnowShovel {
         );
     }
 
+    @Deprecated
     private @Nullable RunRequest detectAutomaticChanges() throws IOException {
         LOGGER.info("Running in Automatic mode.");
         RunRequest request = detectSelfChanges();
@@ -726,6 +750,7 @@ public class SnowShovel {
         );
     }
 
+    @Deprecated
     private @Nullable RunRequest detectSelfChanges() throws IOException {
         LOGGER.info("Checking for changes to SnowShovel version since last run..");
         var prev = data.get(TAG_SNOW_SHOVEL_VERSION);
@@ -739,6 +764,7 @@ public class SnowShovel {
         );
     }
 
+    @Deprecated
     private @Nullable RunRequest detectMinecraftChanges() throws IOException {
         LOGGER.info("Checking for changes to Minecraft versions since last run..");
         var changedVersions = VersionManifestTasks.changedVersions(this);
@@ -754,6 +780,7 @@ public class SnowShovel {
         );
     }
 
+    @Deprecated
     private @Nullable RunRequest detectDecompilerChanges() throws IOException {
         LOGGER.info("Checking for changes to Decompiler version since last run..");
 
@@ -769,12 +796,14 @@ public class SnowShovel {
         );
     }
 
+    @Deprecated
     private List<VersionRequest> allVersions(String commitName) throws IOException {
         return FastStream.of(VersionManifestTasks.allVersions(this))
                 .map(e -> new VersionRequest(e, commitName))
                 .toList();
     }
 
+    @Deprecated
     private FastStream<ProcessableVersion> prepareRequestedVersions(List<VersionRequest> requests) {
         Map<String, String> commitNames = FastStream.of(requests)
                 .toMap(e -> e.version.id(), e -> e.commitName);
@@ -789,6 +818,7 @@ public class SnowShovel {
 
     }
 
+    @Deprecated
     private FastStream<ProcessableVersion> prepareRequestedMatrixVersions(FastStream<MatrixJobConfig.JobVersion> jobVersions) throws IOException {
         Map<String, String> idToCommit = jobVersions
                 .toMap(MatrixJobConfig.JobVersion::id, e -> e.commitName);
@@ -802,6 +832,7 @@ public class SnowShovel {
                 .map(e -> new ProcessableVersion(e, idToCommit.get(e.id())));
     }
 
+    @Deprecated
     private @Nullable TestCaseDef processVersion(VersionManifest manifest) throws IOException {
         // Download the client jar and client mappings proguard log.
         var clientJarFuture = manifest.requireDownloadAsync(http, versionsDir, "client", "jar");
@@ -841,6 +872,7 @@ public class SnowShovel {
         return stats;
     }
 
+    @Deprecated
     private void pullCache() throws IOException {
         LOGGER.info("Pulling caches from checked out repo.");
         if (Files.exists(cacheDir)) Files.walkFileTree(cacheDir, new DeleteHierarchyVisitor());
@@ -859,12 +891,14 @@ public class SnowShovel {
         }
     }
 
+    @Deprecated
     private void rebuildMain() throws IOException {
         pushCache();
         emitMainGitignore();
         emitMainReadme();
     }
 
+    @Deprecated
     private void pushCache() throws IOException {
         var dataJson = cacheDir.resolve("versions.json");
         JsonUtils.write(GSON, dataJson, this.data, MAP_STRING_TYPE, StandardCharsets.UTF_8);
@@ -875,6 +909,7 @@ public class SnowShovel {
         }
     }
 
+    @Deprecated
     private void emitMainGitignore() throws IOException {
         Files.writeString(repoDir.resolve(".gitignore"), """
                 # exclude all
@@ -892,6 +927,7 @@ public class SnowShovel {
         );
     }
 
+    @Deprecated
     private void emitMainReadme() throws IOException {
         String readme = """
                 # Shoveled
@@ -907,24 +943,29 @@ public class SnowShovel {
         Files.writeString(repoDir.resolve("README.md"), readme);
     }
 
+    @Deprecated
     public record RunRequest(
             String reason,
             @Nullable String decompilerVersion,
             List<VersionRequest> versions
     ) { }
 
+    @Deprecated
     public record VersionRequest(
             VersionListManifest.Version version,
             String commitName
     ) { }
 
+    @Deprecated
     public record ProcessableVersion(
             VersionManifest manifest,
             String commitName
     ) { }
 
+    @Deprecated
     public record JobMatrix(List<MatrixJob> jobs) { }
 
+    @Deprecated
     public record MatrixJob(
             String name,
             String config
@@ -939,11 +980,13 @@ public class SnowShovel {
         }
     }
 
+    @Deprecated
     public record MatrixJobConfig(
             List<JobVersion> versions,
             String decompilerVersion
     ) {
 
+        @Deprecated
         public record JobVersion(String id, String commitName) { }
     }
 }
