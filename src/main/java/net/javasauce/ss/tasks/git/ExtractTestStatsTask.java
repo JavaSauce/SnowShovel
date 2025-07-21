@@ -1,10 +1,12 @@
 package net.javasauce.ss.tasks.git;
 
-import net.covers1624.quack.collection.FastStream;
 import net.javasauce.ss.tasks.report.TestCaseDef;
 import net.javasauce.ss.util.CommittedTestCaseDef;
+import net.javasauce.ss.util.ProcessableVersionSet;
 import net.javasauce.ss.util.task.TaskInput;
 import net.javasauce.ss.util.task.TaskOutput;
+import org.eclipse.jgit.lib.Ref;
+import org.eclipse.jgit.lib.Repository;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -17,6 +19,7 @@ import java.util.function.Consumer;
 public class ExtractTestStatsTask extends AbstractGitTask {
 
     public final TaskInput<Boolean> checkOrigin = input("checkOrigin");
+    public final TaskInput<ProcessableVersionSet> versionSet = input("versionSet");
 
     public final TaskOutput<Map<String, CommittedTestCaseDef>> testStats = computedOutput("testStats");
 
@@ -32,29 +35,32 @@ public class ExtractTestStatsTask extends AbstractGitTask {
 
     @Override
     protected void execute() throws Throwable {
-        var branches = listAllBranches();
-        Map<String, String> idToCommit = new HashMap<>();
-        if (checkOrigin.get()) {
-            FastStream.of(branches.entrySet())
-                    .filter(e -> e.getKey().startsWith("origin/"))
-                    .forEach(e -> parseBranchToId(e.getKey().replace("origin/", ""), e.getValue(), idToCommit));
-        }
-        FastStream.of(branches.entrySet())
-                .forEach(e -> parseBranchToId(e.getKey(), e.getValue(), idToCommit));
+        var git = this.git.get();
+        var repository = git.getRepository();
+        var versionSet = this.versionSet.get();
+
         Map<String, CommittedTestCaseDef> defs = new HashMap<>();
-        for (var entry : idToCommit.entrySet()) {
-            var testDefs = loadBlob(entry.getValue() + ":src/main/resources/test_stats.json", TestCaseDef::loadTestStats);
-            if (testDefs == null) continue;
+        for (String id : versionSet.allVersions()) {
+            var manifest = versionSet.getManifest(id);
+            var branchName = manifest.computeBranchName();
+            Ref ref = null;
+            if (checkOrigin.get()) {
+                ref = repository.findRef("origin/" + branchName);
+            }
+            if (ref == null) {
+                ref = repository.findRef(branchName);
+            }
+            if (ref == null) continue;
 
-            defs.put(entry.getKey(), new CommittedTestCaseDef(entry.getValue(), getCommitMessage(entry.getValue()), testDefs));
+            var objId = ref.getObjectId();
+            if (objId == null) throw new RuntimeException("Ref has no object? " + branchName + " " + ref);
+
+            var refName = Repository.shortenRefName(objId.getName());
+            var testDef = loadBlob(refName + ":src/main/resources/test_stats.json", TestCaseDef::loadTestStats);
+            if (testDef == null) throw new RuntimeException("Missing test defs for branch " + branchName);
+
+            defs.put(id, new CommittedTestCaseDef(refName, getCommitMessage(refName), testDef));
         }
-
         testStats.set(defs);
-    }
-
-    private static void parseBranchToId(String branch, String commit, Map<String, String> idToCommit) {
-        if (branch.startsWith("release/") || branch.startsWith("snapshot/")) {
-            idToCommit.put(branch.replace("release/", "").replace("snapshot/", ""), commit);
-        }
     }
 }

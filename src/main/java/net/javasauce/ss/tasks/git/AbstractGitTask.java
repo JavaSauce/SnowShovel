@@ -85,6 +85,21 @@ public abstract class AbstractGitTask extends Task {
                 .call();
     }
 
+    protected void amendChanges(@Nullable String message) {
+        LOGGER.info("Amending changes.");
+        if (message == null) {
+            message = getCommitMessage(Constants.HEAD);
+        }
+        try {
+            git.get().commit()
+                    .setAmend(true)
+                    .setMessage(message)
+                    .call();
+        } catch (GitAPIException ex) {
+            throw new RuntimeException("Failed to amend changes.", ex);
+        }
+    }
+
     protected void createTag(String tag) throws GitAPIException {
         LOGGER.info("Creating tag {}", tag);
         git.get().tag()

@@ -17,10 +17,8 @@ import net.covers1624.quack.io.CopyingFileVisitor;
 import net.covers1624.quack.maven.MavenNotation;
 import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.tasks.*;
-import net.javasauce.ss.tasks.git.CheckoutBranchTask;
-import net.javasauce.ss.tasks.git.CommitAndTagTask;
-import net.javasauce.ss.tasks.git.ExtractTestStatsTask;
-import net.javasauce.ss.tasks.git.FastForwardTask;
+import net.javasauce.ss.tasks.detect.DetectChangesTask;
+import net.javasauce.ss.tasks.git.*;
 import net.javasauce.ss.tasks.report.DiscordReportTask;
 import net.javasauce.ss.tasks.report.GenerateComparisonsTask;
 import net.javasauce.ss.tasks.report.TestCaseDef;
@@ -106,13 +104,15 @@ public class SnowShovel implements AutoCloseable {
         OptionSpec<Void> gitCleanOpt = parser.accepts("gitClean", "If SnowShovel should delete the previous checkout (if available) before doing stuff.");
 
         // Dev flags.
+        OptionSpec<Void> simulateFullRunOpt = parser.accepts("simulate-full-run", "Manually run a full decompile of all versions.");
+
         OptionSpec<String> versionOpt = parser.accepts("only-version", "Dev only flag. Filter the versions to process, limited to any specified by this flag.")
+                .availableIf(simulateFullRunOpt)
                 .withRequiredArg()
                 .withValuesSeparatedBy(",");
 
-        OptionSpec<Void> simulateFullRunOpt = parser.accepts("simulate-full-run", "Manually run a full decompile of all versions.");
-
         OptionSpec<String> decompilerVersionOpt = parser.accepts("set-decompiler-version", "Dev only flag. Set the decompiler version to use.")
+                .availableIf(simulateFullRunOpt)
                 .withRequiredArg();
 
         OptionSet optSet = parser.parse(args);
@@ -149,30 +149,31 @@ public class SnowShovel implements AutoCloseable {
         );
 
         try (ss) {
-            RunRequest runRequest;
-            if (optSet.has(simulateFullRunOpt)) {
-                runRequest = ss.manualAllVersionsRun();
-            } else {
-                runRequest = ss.detectAutomaticChanges();
-            }
-            if (runRequest == null) {
-                LOGGER.info("Nothing to do.");
-                return;
-            }
-
-            if (optSet.has(genMatrixOpt)) {
-                ss.runGenMatrix(
-                        runRequest,
-                        optSet.valueOf(matrixSizeOpt),
-                        optSet.valueOf(genMatrixOpt)
-                );
-            } else if (optSet.has(useMatrixOpt)) {
-                ss.runUseMatrix(optSet.valueOf(useMatrixOpt));
-            } else if (optSet.has(finalizeMatrixOpt)) {
-                ss.runFinalizeMatrix(optSet.valueOf(finalizeMatrixOpt));
-            } else {
-                ss.run2(runRequest);
-            }
+            ss.doRun(optSet.has(simulateFullRunOpt));
+//            RunRequest runRequest;
+//            if (optSet.has(simulateFullRunOpt)) {
+//                runRequest = ss.manualAllVersionsRun();
+//            } else {
+//                runRequest = ss.detectAutomaticChanges();
+//            }
+//            if (runRequest == null) {
+//                LOGGER.info("Nothing to do.");
+//                return;
+//            }
+//
+//            if (optSet.has(genMatrixOpt)) {
+//                ss.runGenMatrix(
+//                        runRequest,
+//                        optSet.valueOf(matrixSizeOpt),
+//                        optSet.valueOf(genMatrixOpt)
+//                );
+//            } else if (optSet.has(useMatrixOpt)) {
+//                ss.runUseMatrix(optSet.valueOf(useMatrixOpt));
+//            } else if (optSet.has(finalizeMatrixOpt)) {
+//                ss.runFinalizeMatrix(optSet.valueOf(finalizeMatrixOpt));
+//            } else {
+//                ss.run2(runRequest);
+//            }
         }
 
         LOGGER.info("Done!");
@@ -277,25 +278,54 @@ public class SnowShovel implements AutoCloseable {
             Files.walkFileTree(tempDir, new DeleteHierarchyVisitor());
         }
 
-        // Nuke the repo if we are told to start from scratch.
-        if (shouldClean && Files.exists(repoDir)) {
-            Files.walkFileTree(repoDir, new DeleteHierarchyVisitor());
-        }
-
-        git = GitTasks.setup(repoDir, gitRepo);
-
-        pullCache();
+//        // Nuke the repo if we are told to start from scratch.
+//        if (shouldClean && Files.exists(repoDir)) {
+//            Files.walkFileTree(repoDir, new DeleteHierarchyVisitor());
+//        }
+//
+//        git = GitTasks.setup(repoDir, gitRepo);
+        git = null;
     }
 
-    private void run2(RunRequest runRequest) throws IOException {
-        preTestStats.putAll(pullStatsFromBranches());
-        testStats.putAll(preTestStats);
+    private void doRun(boolean simulateFullRun) throws IOException {
+        // Stage 0, Setup Git
+        var gitSetupTask = SetupGitRepoTask.create("setupGit", gitExecutor, task -> {
+            task.repoDir.set(repoDir);
+            task.repoUrl.set(gitRepo);
+            task.clearClone.set(shouldClean);
+        });
 
-        var toProcess = prepareRequestedVersions(runRequest.versions)
-                .toList();
-        var decompilerVersion = decompilerOverride
-                .or(() -> Optional.ofNullable(runRequest.decompilerVersion))
-                .orElseGet(decompiler::findLatest);
+        var checkoutMain = CheckoutBranchTask.create("checkoutMain", gitExecutor, task -> {
+            task.git.set(gitSetupTask.output);
+            task.branch.set("main");
+        });
+
+        // Stage 1, Detect changes.
+        var detectChanges = DetectChangesTask.create("detectChanges", ForkJoinPool.commonPool(), task -> {
+            task.dependsOn(checkoutMain);
+            task.http.set(http);
+            task.cacheDir.set(repoDir.resolve("cache"));
+            task.versionFilters.set(mcVersionsOverride);
+            task.decompilerOverride.set(decompilerOverride);
+            task.simulateFullRun.set(simulateFullRun);
+        });
+
+        Task.runTasks(List.of(detectChanges));
+
+        // Stage 1.5, Check if redundant, tag main with cache.
+        var runRequest = detectChanges.runRequest.get().orElse(null);
+        if (runRequest == null) return;
+
+        var versionSet = detectChanges.versionSet.get();
+
+        var tempTagMain = CommitTask.create("tagMain", gitExecutor, task -> {
+            task.git.set(gitSetupTask.output);
+            task.commitMessage.set(Optional.of(runRequest.reason()));
+            task.tagName.set(Optional.of("temp/main"));
+        });
+        Task.runTasks(List.of(tempTagMain));
+
+        // TODO split here, gen matrix ends here, use matrix starts.
 
         // Stage 2
         var prepareRemapper = PrepareToolTask.create("prepareRemapper", downloadExecutor, http, task -> {
@@ -304,7 +334,7 @@ public class SnowShovel implements AutoCloseable {
         });
 
         var prepareDecompiler = PrepareToolTask.create("prepareDecompiler", downloadExecutor, http, task -> {
-            task.notation.set(MavenNotation.parse("net.javasauce:Decompiler:0:testframework@zip").withVersion(decompilerVersion));
+            task.notation.set(MavenNotation.parse("net.javasauce:Decompiler:0:testframework@zip").withVersion(runRequest.decompilerVersion()));
             task.toolDir.set(toolsDir);
         });
 
@@ -318,9 +348,9 @@ public class SnowShovel implements AutoCloseable {
         Map<LibraryTasks.LibraryDownload, NewDownloadTask> libraryDownloads = new HashMap<>();
 
         var gitTagAllBarrier = new BarrierTask("gitTagAllBarrier");
-        for (ProcessableVersion version : toProcess) {
-            var manifest = version.manifest;
-            var id = manifest.id();
+        for (var version : runRequest.versions()) {
+            var id = version.id();
+            var manifest = versionSet.getManifest(id);
 
             var downloadClient = NewDownloadTask.create("downloadClient_" + id, downloadExecutor, http, task -> {
                 var download = manifest.downloads().get("client");
@@ -365,10 +395,10 @@ public class SnowShovel implements AutoCloseable {
                 task.output.set(tempDir.resolve(id));
             });
 
-            var branchName = branchNameForVersion(manifest);
+            var branchName = manifest.computeBranchName();
             var checkoutBranchTask = CheckoutBranchTask.create("checkout_" + id, gitExecutor, task -> {
                 task.dependsOn(decompileTask);
-                task.git.set(git);
+                task.git.set(gitSetupTask.output);
                 task.branch.set(branchName);
                 task.clean.set(true);
             });
@@ -391,32 +421,42 @@ public class SnowShovel implements AutoCloseable {
                 task.mcVersion.set(id);
             });
 
-            var commitTask = CommitAndTagTask.create("commitAndTag_" + id, gitExecutor, task -> {
+            var commitTask = CommitTask.create("commitAndTag_" + id, gitExecutor, task -> {
                 task.dependsOn(copyTask);
                 task.dependsOn(genProjectTask);
-                task.git.set(git);
-                task.commitMessage.set(version.commitName);
-                task.tagName.set("temp/" + branchName);
+                task.git.set(gitSetupTask.output);
+                task.commitMessage.set(Optional.of(version.commitName()));
+                task.tagName.set(Optional.of("temp/" + branchName));
             });
             gitTagAllBarrier.dependsOn(commitTask);
         }
-        // TODO, Stage 2 needs to have an optional push task as a barrier.
+
+        var pushAllTagsBarrier = new BarrierTask("pushAllTags");
+        pushAllTagsBarrier.dependsOn(gitTagAllBarrier);
+        if (shouldPush) {
+            var pushTask = PushAllTask.create("pushAllTags", gitExecutor, task -> {
+                task.tags.set(true);
+            });
+            pushAllTagsBarrier.dependsOn(pushTask);
+        }
+
+        // TODO split here, Use matrix ends here, finalize matrix begins.
 
         // Stage 3
-
         var preStats = ExtractTestStatsTask.create("preFFExtractTestStats", gitExecutor, task -> {
-            // TODO give this the version list and guarentee the versions are extracted.
-            task.dependsOn(gitTagAllBarrier);
-            task.git.set(git);
+            task.dependsOn(pushAllTagsBarrier);
+            task.git.set(gitSetupTask.output);
             task.checkOrigin.set(true);
+            task.versionSet.set(versionSet);
         });
 
         var fastForwardBarrier = new BarrierTask("fastForwardBarrier");
-        for (var version : toProcess) {
-            var branch = branchNameForVersion(version.manifest);
-            var fastForward = FastForwardTask.create("fastForward_" + version.manifest.id(), gitExecutor, task -> {
+        for (var version : runRequest.versions()) {
+            var manifest = versionSet.getManifest(version.id());
+            var branch = manifest.computeBranchName();
+            var fastForward = FastForwardTask.create("fastForward_" + version.id(), gitExecutor, task -> {
                 task.dependsOn(preStats);
-                task.git.set(git);
+                task.git.set(gitSetupTask.output);
                 task.branch.set(branch);
                 task.tag.set(Optional.of("temp/" + branch));
             });
@@ -425,28 +465,41 @@ public class SnowShovel implements AutoCloseable {
 
         var fastForwardMain = FastForwardTask.create("fastForwardMain", gitExecutor, task -> {
             task.dependsOn(fastForwardBarrier);
-            task.git.set(git);
+            task.git.set(gitSetupTask.output);
             task.branch.set("main");
             task.tag.set(Optional.of("temp/main"));
         });
 
         var postStats = ExtractTestStatsTask.create("postFFExtractTestStats", gitExecutor, task -> {
-            // TODO give this the version list and guarentee the versions are extracted.
             task.dependsOn(fastForwardMain);
-            task.git.set(git);
+            task.git.set(gitSetupTask.output);
             task.checkOrigin.set(false);
+            task.versionSet.set(versionSet);
         });
 
         var genRootProject = GenerateRootProjectTask.create("genRootProject", ForkJoinPool.commonPool(), task -> {
             task.dependsOn(fastForwardMain);
             task.projectDir.set(repoDir);
-//            task.versions.set(); // TODO we need the full version list here.
+            task.versions.set(versionSet.allVersions());
             task.testDefs.set(postStats.testStats);
         });
 
-        var pushBarrier = new BarrierTask("pushBarrier");
+        var amendMain = CommitTask.create("amendMain", gitExecutor, task -> {
+            task.dependsOn(genRootProject);
+            task.git.set(gitSetupTask.output);
+            task.amend.set(true);
+        });
 
-        // TODO push task here
+        var pushBarrier = new BarrierTask("pushBarrier");
+        pushBarrier.dependsOn(amendMain);
+
+        if (shouldPush) {
+            var pushTask = PushAllTask.create("pushAllBranches", gitExecutor, task -> {
+                task.dependsOn(amendMain);
+                task.tags.set(false);
+            });
+            pushBarrier.dependsOn(pushTask);
+        }
 
         var discordPostBarrier = new BarrierTask("discordPostBarrier");
         if (DISCORD_WEBHOOK != null) {
@@ -460,7 +513,7 @@ public class SnowShovel implements AutoCloseable {
                 task.webhook.set(DISCORD_WEBHOOK);
                 task.gitRepoUrl.set(gitRepo);
                 task.http.set(http);
-//                task.versions.set(); // TODO we need the full version list here.
+                task.versions.set(versionSet.allVersions());
                 task.postDefs.set(postStats.testStats);
                 task.comparisons.set(genComparisons.comparisons);
             });
@@ -494,7 +547,7 @@ public class SnowShovel implements AutoCloseable {
         for (var version : toProcess) {
             var manifest = version.manifest;
             LOGGER.info("Processing version {} {}/{}", manifest.id(), ++i, toProcess.size());
-            GitTasks.checkoutOrCreateBranch(git, branchNameForVersion(manifest));
+            GitTasks.checkoutOrCreateBranch(git, manifest.computeBranchName());
             GitTasks.removeAllFiles(repoDir);
 
             var stats = processVersion(manifest);
@@ -573,13 +626,13 @@ public class SnowShovel implements AutoCloseable {
         for (var version : toProcess) {
             var manifest = version.manifest;
             LOGGER.info("Processing version {} {}/{}", manifest.id(), ++i, toProcess.size());
-            GitTasks.checkoutOrCreateBranch(git, branchNameForVersion(manifest));
+            GitTasks.checkoutOrCreateBranch(git, manifest.computeBranchName());
             GitTasks.removeAllFiles(repoDir);
 
             processVersion(manifest);
 
             GitTasks.stageAndCommit(git, version.commitName);
-            GitTasks.createTag(git, "temp/" + branchNameForVersion(manifest));
+            GitTasks.createTag(git, "temp/" + manifest.computeBranchName());
         }
         if (shouldPush) {
             GitTasks.pushAllTags(git);
@@ -601,7 +654,7 @@ public class SnowShovel implements AutoCloseable {
         var allTags = FastStream.of(GitTasks.listAllTags(git))
                 .toMap(GitTasks.TagEntry::name, GitTasks.TagEntry::commit);
         for (var version : toProcess) {
-            var branchName = branchNameForVersion(version.manifest);
+            var branchName = version.manifest.computeBranchName();
             var tagName = "temp/" + branchName;
             var tagCommit = allTags.get(tagName);
             if (tagCommit == null) {
@@ -891,10 +944,6 @@ public class SnowShovel implements AutoCloseable {
         );
 
         Files.writeString(repoDir.resolve("README.md"), readme);
-    }
-
-    private static String branchNameForVersion(VersionManifest manifest) {
-        return manifest.type() + "/" + manifest.id();
     }
 
     @Override

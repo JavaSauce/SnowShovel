@@ -60,11 +60,19 @@ public record VersionManifest(
     }
 
     public static VersionManifest update(HttpEngine http, Path versionsDir, VersionListManifest.Version version) throws IOException {
-        var file = DownloadTask.of(versionsDir.resolve(version.id() + "/" + version.id() + ".json"), version.url())
+        var file = DownloadTask.of(pathForId(versionsDir, version.id()), version.url())
                 .withDownloadHash(version.sha1())
                 .withMutator(JsonPretty::prettyPrintJsonFile)
                 .execute(http);
+        return loadFrom(file);
+    }
+
+    public static VersionManifest loadFrom(Path file) throws IOException {
         return JsonUtils.parse(GSON, file, VersionManifest.class);
+    }
+
+    public static Path pathForId(Path versionsDir, String id) {
+        return versionsDir.resolve(id).resolve(id + ".json");
     }
 
     public Path requireDownload(HttpEngine http, Path versionsDir, String downloadName, String fileExtension) throws IOException {
@@ -102,6 +110,10 @@ public record VersionManifest(
         if (javaVersion != null) version = JavaVersion.parse(javaVersion.majorVersion() + "");
         if (version == null) version = JavaVersion.JAVA_1_8;
         return version;
+    }
+
+    public String computeBranchName() {
+        return type() + "/" + id();
     }
 
     @Override
