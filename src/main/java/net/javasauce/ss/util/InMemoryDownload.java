@@ -50,13 +50,13 @@ public record InMemoryDownload(boolean isUpToDate, byte[] body, @Nullable String
             }
 
             // @formatter:off
-                @Override public OutputStream getOutputStream() { return bos; }
-                @Override public @Nullable String getEtag() { return etag; }
-                @Override public void setEtag(String etag) { this.etag = etag; }
-                @Override public long getLastModified() { return -1; }
-                @Override public void setLastModified(long time) { }
-                @Override public void onFinished(boolean success) { }
-                // @formatter:on
+            @Override public OutputStream getOutputStream() { return bos; }
+            @Override public @Nullable String getEtag() { return etag; }
+            @Override public void setEtag(String etag) { this.etag = etag; }
+            @Override public long getLastModified() { return -1; }
+            @Override public void setLastModified(long time) { }
+            @Override public void onFinished(boolean success) { }
+            // @formatter:on
         }
         DownloadDest dest = new DownloadDest();
         boolean isUpToDate = getWithRetry(10, () -> {
