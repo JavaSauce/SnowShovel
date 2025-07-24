@@ -19,7 +19,9 @@ import java.nio.file.Path;
  */
 public record InMemoryDownload(boolean isUpToDate, byte[] body, @Nullable String etag) {
 
-    public static InMemoryDownload readFrom(Path file) throws IOException {
+    public static @Nullable InMemoryDownload readFrom(Path file) throws IOException {
+        if (Files.notExists(file)) return null;
+
         Path etagFile = file.resolveSibling(file.getFileName() + ".etag");
 
         return new InMemoryDownload(

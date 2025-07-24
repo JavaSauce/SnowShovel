@@ -7,7 +7,6 @@ import net.javasauce.ss.util.task.Task;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +17,12 @@ import java.util.concurrent.ForkJoinPool;
 import static java.util.Objects.requireNonNull;
 
 /**
+ * A set of Minecraft versions.
+ * <p>
+ * Will use a previous version manifest if available, or download a fresh one.
+ * <p>
+ * Must be explicitly updated via {@link #update()} if a manifest is to be replaced.
+ * <p>
  * Created by covers1624 on 7/19/25.
  */
 public class ProcessableVersionSet {
@@ -27,22 +32,13 @@ public class ProcessableVersionSet {
     private final HttpEngine http;
     private final Path cacheDir;
     private @Nullable VersionListManifest listManifest;
-    private @Nullable InMemoryDownload listManifestDownload;
 
     private @Nullable List<String> allVersions;
     private @Nullable Map<String, VersionManifest> versionManifests;
 
-    public ProcessableVersionSet(HttpEngine http, Path cacheDir) throws IOException {
+    public ProcessableVersionSet(HttpEngine http, Path cacheDir) {
         this.http = http;
         this.cacheDir = cacheDir;
-        if (Files.notExists(cacheDir)) return;
-
-        Path listFile = cacheDir.resolve("version_manifest_v2.json");
-        if (!Files.exists(listFile)) return;
-
-        listManifestDownload = InMemoryDownload.readFrom(listFile);
-
-        listManifest = VersionListManifest.loadFrom(listManifestDownload.toString());
     }
 
     public List<ChangedVersion> update() throws IOException {
@@ -50,14 +46,13 @@ public class ProcessableVersionSet {
             throw new IllegalStateException("Unable to update version list once manifests have been resolved.");
         }
 
-        var newDownload = InMemoryDownload.doDownload(http, VERSION_MANIFEST_URL, listManifestDownload);
+        var existingDownload = InMemoryDownload.readFrom(cacheDir.resolve("version_manifest_v2.json"));
+        var newDownload = InMemoryDownload.doDownload(http, VERSION_MANIFEST_URL, existingDownload);
         if (newDownload.isUpToDate()) return List.of();
 
         var oldManifest = listManifest;
         var newManifest = VersionListManifest.loadFrom(newDownload.toString());
         newDownload.writeTo(cacheDir.resolve("version_manifest_v2.json"));
-
-        listManifestDownload = newDownload;
 
         Map<String, VersionListManifest.Version> oldMap = oldManifest != null ? oldManifest.versionsMap() : Map.of();
 
@@ -77,8 +72,13 @@ public class ProcessableVersionSet {
 
     public VersionListManifest listManifest() {
         if (listManifest == null) {
-            listManifestDownload = InMemoryDownload.doDownload(http, VERSION_MANIFEST_URL, null);
-            listManifest = VersionListManifest.loadFrom(listManifestDownload.toString());
+            try {
+                var existing = InMemoryDownload.readFrom(cacheDir.resolve("version_manifest_v2.json"));
+                var download = InMemoryDownload.doDownload(http, VERSION_MANIFEST_URL, existing);
+                listManifest = VersionListManifest.loadFrom(download.toString());
+            } catch (IOException ex) {
+                throw new RuntimeException("Failed to load manifest.", ex);
+            }
         }
         return listManifest;
     }
@@ -105,10 +105,8 @@ public class ProcessableVersionSet {
     }
 
     private void populateManifests() {
-        // TODO this really shouldn't write to disk, we should save that for the `save()` function.
         var downloads = FastStream.of(listManifest().versions())
                 .filter(e -> !IgnoredVersions.IGNORED_VERSION.contains(e.id()))
-                // TODO perhaps we can move InMemoryDownload to a task and use that here, then also hold onto the task list?
                 .map(version -> DownloadTask.create("downloadManifest_" + version.id(), ForkJoinPool.commonPool(), http, task -> {
                     task.url.set(version.url());
                     task.downloadHash.set(Optional.of(version.sha1()));
@@ -127,7 +125,6 @@ public class ProcessableVersionSet {
             throw new RuntimeException("Failed to read manifests.", ex);
         }
 
-        // TODO verify that reversed here is right.
         allVersions = List.copyOf(FastStream.of(manifests.reversed())
                 .map(VersionManifest::id)
                 .toList());

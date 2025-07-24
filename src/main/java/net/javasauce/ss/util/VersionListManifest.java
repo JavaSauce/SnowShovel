@@ -6,6 +6,7 @@ import net.covers1624.quack.gson.JsonUtils;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -23,12 +24,8 @@ public record VersionListManifest(
 
     private static final Gson GSON = new Gson();
 
-    public static VersionListManifest loadFrom(String str) {
-        try {
-            return JsonUtils.parse(GSON, str, VersionListManifest.class);
-        } catch (IOException ex) {
-            throw new RuntimeException("Failed to parse manifest.", ex);
-        }
+    public static VersionListManifest loadFrom(String str) throws IOException {
+        return JsonUtils.parse(GSON, str, VersionListManifest.class);
     }
 
     @Override
