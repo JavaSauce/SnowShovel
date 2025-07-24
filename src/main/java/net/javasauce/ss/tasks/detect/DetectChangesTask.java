@@ -60,6 +60,7 @@ public class DetectChangesTask extends Task {
             if (request != null) {
                 repoProperties.setValue(RepoProperties.TAG_SNOW_SHOVEL_VERSION, SnowShovel.VERSION);
                 repoProperties.setValue(RepoProperties.TAG_DECOMPILER_VERSION, request.decompilerVersion());
+                repoProperties.save();
             }
         } else {
             LOGGER.info("Running in Manual mode. Re-processing everything.");
