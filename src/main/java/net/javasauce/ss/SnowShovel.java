@@ -456,15 +456,18 @@ public class SnowShovel {
     ) {
         // Stage 3
         var fastForwardBarrier = new BarrierTask("fastForwardBarrier");
+        List<String> tagsToDelete = new ArrayList<>();
         for (var version : runRequest.versions()) {
             var manifest = versionSet.getManifest(version.id());
             var branch = manifest.computeBranchName();
+            var tag = "temp/" + branch;
             var fastForward = FastForwardTask.create("fastForward_" + version.id(), GIT_EXECUTOR, task -> {
                 task.dependsOn(preStats);
                 task.git.set(gitSetupTask.output);
                 task.branch.set(branch);
-                task.tag.set(Optional.of("temp/" + branch));
+                task.tag.set(Optional.of(tag));
             });
+            tagsToDelete.add(tag);
             fastForwardBarrier.dependsOn(fastForward);
         }
 
@@ -474,6 +477,7 @@ public class SnowShovel {
             task.branch.set("main");
             task.tag.set(Optional.of("temp/main"));
         });
+        tagsToDelete.add("temp/main");
 
         var postStats = ExtractTestStatsTask.create("postFFExtractTestStats", GIT_EXECUTOR, task -> {
             task.dependsOn(fastForwardMain);
@@ -500,11 +504,20 @@ public class SnowShovel {
 
         if (shouldPush) {
             var pushTask = PushAllTask.create("pushAllBranches", GIT_EXECUTOR, task -> {
+                task.git.set(gitSetupTask.output);
                 task.dependsOn(amendMain);
                 task.tags.set(false);
             });
             pushBarrier.dependsOn(pushTask);
         }
+
+        var deleteTags = DeleteTagsTask.create("deleteTags", GIT_EXECUTOR, task -> {
+            task.dependsOn(pushBarrier);
+            task.git.set(gitSetupTask.output);
+            task.tagNames.set(tagsToDelete);
+            task.local.set(true);
+            task.remote.set(shouldPush);
+        });
 
         var discordPostBarrier = new BarrierTask("discordPostBarrier");
         if (DISCORD_WEBHOOK != null) {
@@ -525,7 +538,7 @@ public class SnowShovel {
             discordPostBarrier.dependsOn(discordReport);
         }
 
-        Task.runTasks(pushBarrier, discordPostBarrier);
+        Task.runTasks(pushBarrier, deleteTags, discordPostBarrier);
     }
 
     private static SetupJdkTask getJdkTask(JdkProvider jdkProvider, JavaVersion javaVersion) {
