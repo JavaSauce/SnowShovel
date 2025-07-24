@@ -127,7 +127,7 @@ public class SnowShovel {
                 .ofType(Integer.class)
                 .defaultsTo(8);
 
-        var useMatrixOpt = runMatrixBuilder
+        var runMatrixOpt = runMatrixBuilder
                 .availableUnless(finalizeMatrixBuilder)
                 .withRequiredArg()
                 .withValuesConvertedBy(new PathConverter(PathProperties.FILE_EXISTING));
@@ -233,8 +233,8 @@ public class SnowShovel {
                 net.javasauce.ss.util.matrix.JobMatrix.write(optSet.valueOf(genMatrixOpt), matrix);
                 return;
             }
-            if (optSet.has(useMatrixOpt)) {
-                var runRequest = net.javasauce.ss.util.RunRequest.parse(optSet.valueOf(useMatrixOpt));
+            if (optSet.has(runMatrixOpt)) {
+                var runRequest = net.javasauce.ss.util.RunRequest.parse(optSet.valueOf(runMatrixOpt));
                 var versionSet = new ProcessableVersionSet(http, repoDir.resolve("cache"));
                 versionSet.allVersions();
                 runStage2(http, jdkProvider, toolsDir, librariesDir, versionsDir, tempDir, repoDir, runRequest, versionSet, gitSetupTask, shouldPush);
