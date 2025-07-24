@@ -3,7 +3,7 @@ package net.javasauce.ss.util;
 import net.covers1624.quack.collection.FastStream;
 import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.tasks.DownloadTasks;
-import net.javasauce.ss.tasks.NewDownloadTask;
+import net.javasauce.ss.tasks.DownloadTask;
 import net.javasauce.ss.util.task.Task;
 import org.jetbrains.annotations.Nullable;
 
@@ -110,7 +110,7 @@ public class ProcessableVersionSet {
         var downloads = FastStream.of(listManifest().versions())
                 .filter(e -> !IgnoredVersions.IGNORED_VERSION.contains(e.id()))
                 // TODO perhaps we can move InMemoryDownload to a task and use that here, then also hold onto the task list?
-                .map(version -> NewDownloadTask.create("downloadManifest_" + version.id(), ForkJoinPool.commonPool(), http, task -> {
+                .map(version -> DownloadTask.create("downloadManifest_" + version.id(), ForkJoinPool.commonPool(), http, task -> {
                     task.url.set(version.url());
                     task.downloadHash.set(Optional.of(version.sha1()));
                     task.output.set(VersionManifest.pathForId(cacheDir, version.id()));
@@ -121,7 +121,7 @@ public class ProcessableVersionSet {
 
         List<VersionManifest> manifests = new ArrayList<>();
         try {
-            for (NewDownloadTask download : downloads) {
+            for (DownloadTask download : downloads) {
                 manifests.add(VersionManifest.loadFrom(download.output.get()));
             }
         } catch (IOException ex) {

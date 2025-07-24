@@ -20,6 +20,8 @@ import net.javasauce.ss.tasks.util.*;
 import net.javasauce.ss.util.DeleteHierarchyVisitor;
 import net.javasauce.ss.util.JdkProvider;
 import net.javasauce.ss.util.ProcessableVersionSet;
+import net.javasauce.ss.util.RunRequest;
+import net.javasauce.ss.util.matrix.JobMatrix;
 import net.javasauce.ss.util.task.Task;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.eclipse.jgit.transport.CredentialsProvider;
@@ -213,12 +215,12 @@ public class SnowShovel {
                     Task.runTasks(pushTask);
                 }
 
-                var matrix = net.javasauce.ss.util.RunRequest.splitJobs(stage1.runRequest, optSet.valueOf(matrixSizeOpt));
-                net.javasauce.ss.util.matrix.JobMatrix.write(optSet.valueOf(genMatrixOpt), matrix);
+                var matrix = RunRequest.splitJobs(stage1.runRequest, optSet.valueOf(matrixSizeOpt));
+                JobMatrix.write(optSet.valueOf(genMatrixOpt), matrix);
                 return;
             }
             if (optSet.has(runMatrixOpt)) {
-                var runRequest = net.javasauce.ss.util.RunRequest.parse(optSet.valueOf(runMatrixOpt));
+                var runRequest = RunRequest.parse(optSet.valueOf(runMatrixOpt));
                 var versionSet = new ProcessableVersionSet(http, repoDir.resolve("cache"));
                 versionSet.allVersions();
                 runStage2(http, jdkProvider, toolsDir, librariesDir, versionsDir, tempDir, repoDir, runRequest, versionSet, gitSetupTask, shouldPush);
@@ -226,8 +228,8 @@ public class SnowShovel {
             }
             if (optSet.has(finalizeMatrixOpt)) {
                 var versionSet = new ProcessableVersionSet(http, repoDir.resolve("cache"));
-                var matrix = net.javasauce.ss.util.matrix.JobMatrix.parse(optSet.valueOf(finalizeMatrixOpt));
-                var runRequest = net.javasauce.ss.util.RunRequest.mergeJobs(matrix);
+                var matrix = JobMatrix.parse(optSet.valueOf(finalizeMatrixOpt));
+                var runRequest = RunRequest.mergeJobs(matrix);
                 // Technically we will have the same issue as a non-matrix run, however, it is assumed that matrix runs are performed in CI, where
                 // the branches aren't updated, only the tags are.
                 var preStats = ExtractTestStatsTask.create("preExtractTestStats", GIT_EXECUTOR, task -> {
@@ -294,7 +296,7 @@ public class SnowShovel {
     }
 
     private record Stage1Pair(
-            net.javasauce.ss.util.RunRequest runRequest,
+            RunRequest runRequest,
             ProcessableVersionSet versionSet
     ) { }
 
@@ -306,7 +308,7 @@ public class SnowShovel {
             Path versionsDir,
             Path tempDir,
             Path repoDir,
-            net.javasauce.ss.util.RunRequest runRequest,
+            RunRequest runRequest,
             ProcessableVersionSet versionSet,
             SetupGitRepoTask gitSetupTask,
             boolean shouldPush
@@ -323,21 +325,21 @@ public class SnowShovel {
             task.toolDir.set(toolsDir);
         });
 
-        var downloadGradleWrapper = NewDownloadTask.create("downloadGradleWrapper", DOWNLOAD_EXECUTOR, http, task -> {
+        var downloadGradleWrapper = DownloadTask.create("downloadGradleWrapper", DOWNLOAD_EXECUTOR, http, task -> {
             task.output.set(librariesDir.resolve("GradleWrapper.zip"));
             task.url.set("https://covers1624.net/Files/GradleWrapper-8.10.2.zip");
             task.downloadLen.set(44825L);
             task.downloadHash.set(Optional.of("2e355d2ede2307bfe40330db29f52b9b729fd9b2"));
         });
 
-        Map<LibraryTasks.LibraryDownload, NewDownloadTask> libraryDownloads = new HashMap<>();
+        Map<LibraryTasks.LibraryDownload, DownloadTask> libraryDownloads = new HashMap<>();
 
         var gitTagAllBarrier = new BarrierTask("gitTagAllBarrier");
         for (var version : runRequest.versions()) {
             var id = version.id();
             var manifest = versionSet.getManifest(id);
 
-            var downloadClient = NewDownloadTask.create("downloadClient_" + id, DOWNLOAD_EXECUTOR, http, task -> {
+            var downloadClient = DownloadTask.create("downloadClient_" + id, DOWNLOAD_EXECUTOR, http, task -> {
                 var download = manifest.downloads().get("client");
                 task.output.set(versionsDir.resolve(id).resolve(id + "-client.jar"));
                 task.url.set(download.url());
@@ -345,7 +347,7 @@ public class SnowShovel {
                 task.downloadLen.set(download.size());
             });
 
-            var downloadClientMappings = NewDownloadTask.create("downloadClientMappings_" + id, DOWNLOAD_EXECUTOR, http, task -> {
+            var downloadClientMappings = DownloadTask.create("downloadClientMappings_" + id, DOWNLOAD_EXECUTOR, http, task -> {
                 var download = manifest.downloads().get("client_mappings");
                 task.output.set(versionsDir.resolve(id).resolve(id + "-client_mappings.jar"));
                 task.url.set(download.url());
@@ -362,9 +364,9 @@ public class SnowShovel {
             });
 
             var libDefs = LibraryTasks.getVersionLibraries(manifest, librariesDir);
-            List<NewDownloadTask> libraries = FastStream.of(libDefs)
+            List<DownloadTask> libraries = FastStream.of(libDefs)
                     .map(library -> libraryDownloads.computeIfAbsent(library, e2 ->
-                            NewDownloadTask.create("downloadLibrary_" + library.notation(), DOWNLOAD_EXECUTOR, http, task -> {
+                            DownloadTask.create("downloadLibrary_" + library.notation(), DOWNLOAD_EXECUTOR, http, task -> {
                                 task.url.set(library.url());
                                 task.output.set(library.path());
                                 task.downloadHash.set(Optional.ofNullable(library.sha1()));
@@ -431,7 +433,7 @@ public class SnowShovel {
     private static void runStage3(
             HttpEngine http,
             Path repoDir,
-            net.javasauce.ss.util.RunRequest runRequest,
+            RunRequest runRequest,
             ProcessableVersionSet versionSet,
             SetupGitRepoTask gitSetupTask,
             ExtractTestStatsTask preStats,

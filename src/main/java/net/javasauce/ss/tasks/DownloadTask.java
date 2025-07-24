@@ -25,9 +25,9 @@ import java.util.function.Consumer;
 /**
  * Created by covers1624 on 6/24/25.
  */
-public class NewDownloadTask extends Task {
+public class DownloadTask extends Task {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(NewDownloadTask.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(DownloadTask.class);
 
     private final HttpEngine http;
 
@@ -41,7 +41,7 @@ public class NewDownloadTask extends Task {
 
     private final List<ThrowingConsumer<Path, IOException>> mutators = new ArrayList<>();
 
-    private NewDownloadTask(String name, Executor executor, HttpEngine http) {
+    private DownloadTask(String name, Executor executor, HttpEngine http) {
         super(name, executor);
         this.http = http;
 
@@ -54,13 +54,13 @@ public class NewDownloadTask extends Task {
         });
     }
 
-    public static NewDownloadTask create(String name, Executor executor, HttpEngine http, Consumer<NewDownloadTask> configure) {
-        var task = new NewDownloadTask(name, executor, http);
+    public static DownloadTask create(String name, Executor executor, HttpEngine http, Consumer<DownloadTask> configure) {
+        var task = new DownloadTask(name, executor, http);
         configure.accept(task);
         return task;
     }
 
-    public NewDownloadTask addMutator(ThrowingConsumer<Path, IOException> mutFunc) {
+    public DownloadTask addMutator(ThrowingConsumer<Path, IOException> mutFunc) {
         mutators.add(mutFunc);
         return this;
     }

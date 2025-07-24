@@ -31,7 +31,7 @@ public class PrepareToolTask extends Task {
     private PrepareToolTask(String name, Executor executor, HttpEngine http) {
         super(name, executor);
 
-        var downloadToolTask = NewDownloadTask.create(name + "_download", executor, http, task -> {
+        var downloadToolTask = DownloadTask.create(name + "_download", executor, http, task -> {
             task.output.deriveFrom(toolDir, notation, (t, n) -> n.toPath(t));
             task.url.deriveFrom(notation, e -> e.toURL("https://maven.covers1624.net").toString());
             task.localOverride.deriveFrom(notation, e -> Optional.ofNullable(findMavenLocalFile(e)));
