@@ -59,5 +59,4 @@ public class RepoProperties {
         var versionsFile = cacheDir.resolve("versions.json");
         JsonUtils.write(GSON, IOUtils.makeParents(versionsFile), properties, MAP_STRING_TYPE, StandardCharsets.UTF_8);
     }
-
 }

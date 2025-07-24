@@ -1,6 +1,5 @@
 package net.javasauce.ss.tasks.report;
 
-import net.covers1624.quack.collection.ColUtils;
 import net.covers1624.quack.collection.FastStream;
 import net.javasauce.ss.util.CommittedTestCaseDef;
 import net.javasauce.ss.util.task.Task;
@@ -8,9 +7,7 @@ import net.javasauce.ss.util.task.TaskInput;
 import net.javasauce.ss.util.task.TaskOutput;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
@@ -49,70 +46,6 @@ public class GenerateComparisonsTask extends Task {
         removed.forEach(id -> comparisons.put(id, compareCases(preStats.get(id), null)));
         common.forEach(id -> comparisons.put(id, compareCases(preStats.get(id), postStats.get(id))));
         this.comparisons.set(comparisons);
-    }
-
-    @Deprecated
-    public static String generateReport(List<ReportPair> defs) {
-        if (defs.isEmpty()) return "No test stats found.";
-
-        List<String> table = new ArrayList<>();
-        List<TestCaseState> order = TestCaseState.VALUES.reversed();
-        table.add("<table>");
-        table.add("<tr>");
-        table.add("<td>Version</td>");
-        for (var state : order) {
-            emitTableCell(table, state.humanName);
-        }
-        table.add("</tr>");
-
-        defs.forEach(e -> {
-            var stats = buildStats(e.def);
-            table.add("<tr>");
-            emitTableCell(table, e.mcVersion);
-            for (var state : order) {
-                emitTableCell(table, "" + stats.numCases[state.ordinal()]);
-            }
-            table.add("</tr>");
-        });
-        table.add("</table>");
-        return String.join("\n", table);
-    }
-
-    @Deprecated
-    private static void emitTableCell(List<String> table, String cellContent) {
-        emitTableCell(table, List.of(cellContent));
-    }
-
-    // GitHub markdown is disgusting and requires lots of newlines inside a cell for markdown content (code blocks)
-    @Deprecated
-    private static void emitTableCell(List<String> table, List<String> cellContent) {
-        if (ColUtils.allMatch(cellContent, String::isEmpty)) {
-            table.add("<td></td>");
-        } else {
-            // If there is any Markdown code blocks/quotes in the cell, we need to emit full spaces before/after its lines, because ~~GitHub~~.
-            if (ColUtils.anyMatch(cellContent, e -> e.contains("`"))) {
-                table.add("<td>");
-                table.add("");
-                table.addAll(cellContent);
-                table.add("");
-                table.add("</td>");
-            } else if (cellContent.size() == 1) {
-                table.add("<td>" + cellContent.getFirst() + "</td>");
-            } else {
-                table.add("<td>");
-                table.addAll(cellContent);
-                table.add("</td>");
-            }
-        }
-    }
-
-    @Deprecated
-    public static Stats buildStats(TestCaseDef def) {
-        int[] numCases = new int[4];
-        for (var c : def.cases.entrySet()) {
-            numCases[c.getValue().target.ordinal()]++;
-        }
-        return new Stats(numCases);
     }
 
     // Mostly copied from CIBot, perhaps this should live in the test framework or something.
@@ -171,9 +104,6 @@ public class GenerateComparisonsTask extends Task {
         return numCases;
     }
 
-    @Deprecated
-    public record Stats(int[] numCases) { }
-
     public enum ComparisonType {
         COMPARE,
         ADDED,
@@ -217,7 +147,4 @@ public class GenerateComparisonsTask extends Task {
             );
         }
     }
-
-    @Deprecated
-    public record ReportPair(String mcVersion, TestCaseDef def) { }
 }

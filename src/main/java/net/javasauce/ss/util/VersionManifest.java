@@ -10,15 +10,12 @@ import net.covers1624.quack.gson.JsonUtils;
 import net.covers1624.quack.gson.LowerCaseEnumAdapterFactory;
 import net.covers1624.quack.gson.MavenNotationAdapter;
 import net.covers1624.quack.maven.MavenNotation;
-import net.covers1624.quack.net.httpapi.HttpEngine;
-import net.javasauce.ss.tasks.DownloadTask;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.lang.reflect.Type;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
 
 import static java.util.Objects.requireNonNull;
@@ -49,55 +46,12 @@ public record VersionManifest(
             .registerTypeAdapter(MavenNotation.class, new MavenNotationAdapter())
             .create();
 
-    public static CompletableFuture<VersionManifest> updateFuture(HttpEngine http, Path versionsDir, VersionListManifest.Version version) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                return update(http, versionsDir, version);
-            } catch (IOException ex) {
-                throw new RuntimeException("Failed to update version.", ex);
-            }
-        });
-    }
-
-    public static VersionManifest update(HttpEngine http, Path versionsDir, VersionListManifest.Version version) throws IOException {
-        var file = DownloadTask.of(pathForId(versionsDir, version.id()), version.url())
-                .withDownloadHash(version.sha1())
-                .withMutator(JsonPretty::prettyPrintJsonFile)
-                .execute(http);
-        return loadFrom(file);
-    }
-
     public static VersionManifest loadFrom(Path file) throws IOException {
         return JsonUtils.parse(GSON, file, VersionManifest.class);
     }
 
     public static Path pathForId(Path versionsDir, String id) {
         return versionsDir.resolve(id).resolve(id + ".json");
-    }
-
-    public Path requireDownload(HttpEngine http, Path versionsDir, String downloadName, String fileExtension) throws IOException {
-        Download download = downloads().get(downloadName);
-        if (download == null) throw new RuntimeException("Missing download " + downloadName);
-
-        Path file = versionsDir.resolve(id() + "/" + id() + "-" + downloadName + "." + fileExtension);
-        return DownloadTask.of(file, download.url())
-                .withDownloadLen(download.size())
-                .withDownloadHash(download.sha1())
-                .execute(http);
-    }
-
-    public CompletableFuture<Path> requireDownloadAsync(HttpEngine http, Path versionsDir, String downloadName, String fileExtension) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                return requireDownload(http, versionsDir, downloadName, fileExtension);
-            } catch (IOException ex) {
-                throw new RuntimeException("Failed to download file.", ex);
-            }
-        });
-    }
-
-    public boolean hasDownload(String name) {
-        return downloads().containsKey(name);
     }
 
     @Override

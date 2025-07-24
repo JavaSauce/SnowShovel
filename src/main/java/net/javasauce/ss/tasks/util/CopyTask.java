@@ -1,7 +1,6 @@
 package net.javasauce.ss.tasks.util;
 
 import net.covers1624.quack.io.CopyingFileVisitor;
-import net.javasauce.ss.tasks.DecompileTask;
 import net.javasauce.ss.util.task.Task;
 import net.javasauce.ss.util.task.TaskInput;
 import net.javasauce.ss.util.task.TaskOutput;
