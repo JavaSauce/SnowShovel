@@ -177,7 +177,7 @@ public class DetectChangesTask extends Task {
         return ToolUtils.findLatest(
                 http.get(),
                 "https://maven.covers1624.net",
-                MavenNotation.parse("net.javasauce:Decompiler:0:testframework@zip") // TODO const
+                SnowShovel.DECOMPILER_TEMPLATE
         );
     }
 

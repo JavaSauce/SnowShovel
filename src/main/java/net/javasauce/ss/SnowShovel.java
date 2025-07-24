@@ -11,7 +11,10 @@ import net.covers1624.jdkutils.JavaVersion;
 import net.covers1624.quack.collection.FastStream;
 import net.covers1624.quack.maven.MavenNotation;
 import net.covers1624.quack.net.httpapi.HttpEngine;
-import net.javasauce.ss.tasks.*;
+import net.javasauce.ss.tasks.DecompileTask;
+import net.javasauce.ss.tasks.DownloadTask;
+import net.javasauce.ss.tasks.PrepareToolTask;
+import net.javasauce.ss.tasks.RemapperTask;
 import net.javasauce.ss.tasks.detect.DetectChangesTask;
 import net.javasauce.ss.tasks.git.*;
 import net.javasauce.ss.tasks.report.DiscordReportTask;
@@ -79,6 +82,8 @@ public class SnowShovel {
 
     private static final Map<JavaVersion, SetupJdkTask> JDK_TASKS = new HashMap<>();
 
+    public static final MavenNotation FAST_REMAPPER_VERSION = MavenNotation.parse("net.covers1624:FastRemapper:0.3.2.20@zip");
+    public static final MavenNotation DECOMPILER_TEMPLATE = MavenNotation.parse("net.javasauce:Decompiler:0:testframework@zip");
     public static final String VERSION;
 
     static {
@@ -313,12 +318,12 @@ public class SnowShovel {
 
         // Stage 2
         var prepareRemapper = PrepareToolTask.create("prepareRemapper", DOWNLOAD_EXECUTOR, http, task -> {
-            task.notation.set(MavenNotation.parse("net.covers1624:FastRemapper:0.3.2.20@zip"));
+            task.notation.set(FAST_REMAPPER_VERSION);
             task.toolDir.set(toolsDir);
         });
 
         var prepareDecompiler = PrepareToolTask.create("prepareDecompiler", DOWNLOAD_EXECUTOR, http, task -> {
-            task.notation.set(MavenNotation.parse("net.javasauce:Decompiler:0:testframework@zip").withVersion(runRequest.decompilerVersion()));
+            task.notation.set(DECOMPILER_TEMPLATE.withVersion(runRequest.decompilerVersion()));
             task.toolDir.set(toolsDir);
         });
 
