@@ -19,7 +19,6 @@ import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.tasks.*;
 import net.javasauce.ss.tasks.detect.DetectChangesTask;
 import net.javasauce.ss.tasks.git.*;
-import net.javasauce.ss.tasks.matrix.GenMatrixTask;
 import net.javasauce.ss.tasks.report.DiscordReportTask;
 import net.javasauce.ss.tasks.report.GenerateComparisonsTask;
 import net.javasauce.ss.tasks.report.TestCaseDef;
@@ -214,6 +213,64 @@ public class SnowShovel {
             task.branch.set("main");
         });
 
+        var git = gitSetupTask.output.get();
+        try (git; DOWNLOAD_EXECUTOR; REMAPPER_EXECUTOR; DECOMPILE_EXECUTOR; GIT_EXECUTOR) {
+            if (optSet.has(genMatrixOpt)) {
+                var stage1 = runStage1(http, repoDir, checkoutMain, gitSetupTask, simulateFullRun, mcVersionOverride, decompilerOverride);
+                if (stage1 == null) {
+                    LOGGER.info("No changes.");
+                    return;
+                }
+                if (shouldPush) {
+                    var pushTask = PushAllTask.create("pushAllTags", GIT_EXECUTOR, task -> {
+                        task.tags.set(true);
+                    });
+                    Task.runTasks(pushTask);
+                }
+
+                var matrix = net.javasauce.ss.util.RunRequest.splitJobs(stage1.runRequest, optSet.valueOf(matrixSizeOpt));
+                net.javasauce.ss.util.matrix.JobMatrix.write(optSet.valueOf(genMatrixOpt), matrix);
+                return;
+            }
+            if (optSet.has(useMatrixOpt)) {
+                Task.runTasks(checkoutMain);
+
+                var runRequest = net.javasauce.ss.util.RunRequest.parse(optSet.valueOf(useMatrixOpt));
+                var versionSet = new ProcessableVersionSet(http, repoDir.resolve("cache"));
+                versionSet.allVersions();
+                runStage2(http, jdkProvider, toolsDir, librariesDir, versionsDir, tempDir, repoDir, runRequest, versionSet, gitSetupTask, shouldPush);
+                return;
+            }
+            if (optSet.has(finalizeMatrixOpt)) {
+                Task.runTasks(checkoutMain);
+
+                var versionSet = new ProcessableVersionSet(http, repoDir.resolve("cache"));
+                var matrix = net.javasauce.ss.util.matrix.JobMatrix.parse(optSet.valueOf(finalizeMatrixOpt));
+                var runRequest = net.javasauce.ss.util.RunRequest.mergeJobs(matrix);
+                runStage3(http, repoDir, runRequest, versionSet, gitSetupTask, shouldPush, repoUrl);
+                return;
+            }
+
+            var stage1 = runStage1(http, repoDir, checkoutMain, gitSetupTask, simulateFullRun, mcVersionOverride, decompilerOverride);
+            if (stage1 == null) {
+                LOGGER.info("No changes.");
+                return;
+            }
+            runStage2(http, jdkProvider, toolsDir, librariesDir, versionsDir, tempDir, repoDir, stage1.runRequest, stage1.versionSet, gitSetupTask, shouldPush);
+            runStage3(http, repoDir, stage1.runRequest, stage1.versionSet, gitSetupTask, shouldPush, repoUrl);
+        }
+        LOGGER.info("Done!");
+    }
+
+    private static @Nullable Stage1Pair runStage1(
+            HttpEngine http,
+            Path repoDir,
+            CheckoutBranchTask checkoutMain,
+            SetupGitRepoTask gitSetupTask,
+            boolean simulateFullRun,
+            List<String> mcVersionOverride,
+            Optional<String> decompilerOverride
+    ) {
         // Stage 1, Detect changes.
         var detectChanges = DetectChangesTask.create("detectChanges", ForkJoinPool.commonPool(), task -> {
             task.dependsOn(checkoutMain);
@@ -228,7 +285,7 @@ public class SnowShovel {
 
         // Stage 1.5, Check if redundant, tag main with cache.
         var runRequest = detectChanges.runRequest.get().orElse(null);
-        if (runRequest == null) return;
+        if (runRequest == null) return null;
 
         var versionSet = detectChanges.versionSet.get();
 
@@ -238,32 +295,27 @@ public class SnowShovel {
             task.tagName.set(Optional.of("temp/main"));
         });
         Task.runTasks(tempTagMain);
+        return new Stage1Pair(runRequest, versionSet);
+    }
 
-        if (optSet.has(genMatrixOpt)) {
-            var size = optSet.valueOf(matrixSizeOpt);
-            var output = optSet.valueOf(genMatrixOpt);
-            var genMatrix = GenMatrixTask.create("genMatrix", ForkJoinPool.commonPool(), task -> {
-                task.runRequest.set(runRequest);
-                task.matrixSize.set(size);
-                task.output.set(output);
-            });
+    private record Stage1Pair(
+            net.javasauce.ss.util.RunRequest runRequest,
+            ProcessableVersionSet versionSet
+    ) { }
 
-            var pushBarrier = new BarrierTask("pushBarrier");
-            pushBarrier.dependsOn(genMatrix);
-
-            if (shouldPush) {
-                var pushTask = PushAllTask.create("pushAllTags", GIT_EXECUTOR, task -> {
-                    task.tags.set(true);
-                });
-                pushBarrier.dependsOn(pushTask);
-            }
-
-            Task.runTasks(pushBarrier);
-            // TODO close git and the executors.
-            return;
-        }
-
-        // TODO split here, gen matrix ends here, use matrix starts.
+    private static void runStage2(
+            HttpEngine http,
+            JdkProvider jdkProvider,
+            Path toolsDir,
+            Path librariesDir,
+            Path versionsDir,
+            Path tempDir,
+            Path repoDir,
+            net.javasauce.ss.util.RunRequest runRequest,
+            ProcessableVersionSet versionSet,
+            SetupGitRepoTask gitSetupTask,
+            boolean shouldPush
+    ) {
 
         // Stage 2
         var prepareRemapper = PrepareToolTask.create("prepareRemapper", DOWNLOAD_EXECUTOR, http, task -> {
@@ -378,11 +430,21 @@ public class SnowShovel {
             pushAllTagsBarrier.dependsOn(pushTask);
         }
 
-        // TODO split here, Use matrix ends here, finalize matrix begins.
+        Task.runTasks(pushAllTagsBarrier);
+    }
 
+    private static void runStage3(
+            HttpEngine http,
+            Path repoDir,
+            net.javasauce.ss.util.RunRequest runRequest,
+            ProcessableVersionSet versionSet,
+            SetupGitRepoTask gitSetupTask,
+            boolean shouldPush,
+            String repoUrl
+    ) {
         // Stage 3
+        // TODO this may need to be run before doing any work when doing a non-matrix run locally
         var preStats = ExtractTestStatsTask.create("preFFExtractTestStats", GIT_EXECUTOR, task -> {
-            task.dependsOn(pushAllTagsBarrier);
             task.git.set(gitSetupTask.output);
             task.checkOrigin.set(true);
             task.versionSet.set(versionSet);
@@ -459,12 +521,6 @@ public class SnowShovel {
         }
 
         Task.runTasks(pushBarrier, discordPostBarrier);
-
-        gitSetupTask.output.get().close();
-        DOWNLOAD_EXECUTOR.close();
-        REMAPPER_EXECUTOR.close();
-        DECOMPILE_EXECUTOR.close();
-        GIT_EXECUTOR.close();
     }
 
     private static SetupJdkTask getJdkTask(JdkProvider jdkProvider, JavaVersion javaVersion) {
