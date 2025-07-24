@@ -2,7 +2,7 @@ package net.javasauce.ss.tasks.util;
 
 import net.covers1624.jdkutils.JavaVersion;
 import net.covers1624.quack.io.IndentPrintWriter;
-import net.javasauce.ss.tasks.LibraryTasks;
+import net.javasauce.ss.util.LibraryDownload;
 import net.javasauce.ss.tasks.report.TestCaseDef;
 import net.javasauce.ss.util.task.TaskInput;
 import org.jetbrains.annotations.Nullable;
@@ -24,7 +24,7 @@ public class GenerateGradleProjectTask extends GenProjectTask {
     public final TaskInput<Path> projectDir = input("projectDir");
     public final TaskInput<Path> gradleWrapperDist = input("gradleWrapperDist");
     public final TaskInput<JavaVersion> javaVersion = input("javaVersion");
-    public final TaskInput<List<LibraryTasks.LibraryDownload>> libraries = input("libraries");
+    public final TaskInput<List<LibraryDownload>> libraries = input("libraries");
     public final TaskInput<String> mcVersion = input("mcVersion");
 
     private GenerateGradleProjectTask(String name, Executor executor) {
@@ -60,7 +60,7 @@ public class GenerateGradleProjectTask extends GenProjectTask {
         Files.writeString(projectDir.resolve("README.md"), buildReadme(mcVersion.get(), testStats));
     }
 
-    private String buildGradleScript(JavaVersion javaVersion, List<LibraryTasks.LibraryDownload> libraries) {
+    private String buildGradleScript(JavaVersion javaVersion, List<LibraryDownload> libraries) {
         var sw = new StringWriter();
         try (IndentPrintWriter pw = new IndentPrintWriter(new PrintWriter(sw, true))) {
             pw.println("plugins {");
@@ -94,7 +94,7 @@ public class GenerateGradleProjectTask extends GenProjectTask {
 
             pw.println("dependencies {");
             pw.pushIndent();
-            for (LibraryTasks.LibraryDownload library : libraries) {
+            for (LibraryDownload library : libraries) {
                 pw.println("implementation('" + library.notation() + "') { transitive = false }");
             }
             pw.popIndent();

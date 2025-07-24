@@ -2,7 +2,6 @@ package net.javasauce.ss.util;
 
 import net.covers1624.quack.collection.FastStream;
 import net.covers1624.quack.net.httpapi.HttpEngine;
-import net.javasauce.ss.tasks.DownloadTasks;
 import net.javasauce.ss.tasks.DownloadTask;
 import net.javasauce.ss.util.task.Task;
 import org.jetbrains.annotations.Nullable;
@@ -28,7 +27,7 @@ public class ProcessableVersionSet {
     private final HttpEngine http;
     private final Path cacheDir;
     private @Nullable VersionListManifest listManifest;
-    private @Nullable DownloadTasks.InMemoryDownload listManifestDownload;
+    private @Nullable InMemoryDownload listManifestDownload;
 
     private @Nullable List<String> allVersions;
     private @Nullable Map<String, VersionManifest> versionManifests;
@@ -41,7 +40,7 @@ public class ProcessableVersionSet {
         Path listFile = cacheDir.resolve("version_manifest_v2.json");
         if (!Files.exists(listFile)) return;
 
-        listManifestDownload = DownloadTasks.InMemoryDownload.readFrom(listFile);
+        listManifestDownload = InMemoryDownload.readFrom(listFile);
 
         listManifest = VersionListManifest.loadFrom(listManifestDownload.toString());
     }
@@ -51,7 +50,7 @@ public class ProcessableVersionSet {
             throw new IllegalStateException("Unable to update version list once manifests have been resolved.");
         }
 
-        var newDownload = DownloadTasks.inMemoryDownload(http, VERSION_MANIFEST_URL, listManifestDownload);
+        var newDownload = InMemoryDownload.doDownload(http, VERSION_MANIFEST_URL, listManifestDownload);
         if (newDownload.isUpToDate()) return List.of();
 
         var oldManifest = listManifest;
@@ -78,7 +77,7 @@ public class ProcessableVersionSet {
 
     public VersionListManifest listManifest() {
         if (listManifest == null) {
-            listManifestDownload = DownloadTasks.inMemoryDownload(http, VERSION_MANIFEST_URL, null);
+            listManifestDownload = InMemoryDownload.doDownload(http, VERSION_MANIFEST_URL, null);
             listManifest = VersionListManifest.loadFrom(listManifestDownload.toString());
         }
         return listManifest;

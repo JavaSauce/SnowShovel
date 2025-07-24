@@ -1,8 +1,7 @@
-package net.javasauce.ss.tasks;
+package net.javasauce.ss.util;
 
 import net.covers1624.quack.collection.FastStream;
 import net.covers1624.quack.maven.MavenNotation;
-import net.javasauce.ss.util.VersionManifest;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.Nullable;
 
@@ -14,7 +13,7 @@ import java.util.Set;
 /**
  * Created by covers1624 on 1/20/25.
  */
-public class LibraryTasks {
+public record LibraryDownload(MavenNotation notation, String url, @Nullable String sha1, long size, Path path) {
 
     // Minecraft compiles against these annotations, but does not ship them for runtime.
     // Some versions don't need them applied, but it's fine to add anyway.
@@ -53,6 +52,4 @@ public class LibraryTasks {
 
         return new LibraryDownload(library.name(), artifact.url(), artifact.sha1(), artifact.size(), libPath);
     }
-
-    public record LibraryDownload(MavenNotation notation, String url, @Nullable String sha1, long size, Path path) { }
 }

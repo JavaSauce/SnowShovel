@@ -2,7 +2,6 @@ package net.javasauce.ss.util;
 
 import net.covers1624.quack.maven.MavenNotation;
 import net.covers1624.quack.net.httpapi.HttpEngine;
-import net.javasauce.ss.tasks.DownloadTasks;
 import org.w3c.dom.Document;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
@@ -21,7 +20,7 @@ public class ToolUtils {
     public static String findLatest(HttpEngine http, String maven, MavenNotation notation) {
         if (!maven.endsWith("/")) maven += "/";
 
-        var download = DownloadTasks.inMemoryDownload(http, maven + notation.toModulePath() + "maven-metadata.xml", null);
+        var download = InMemoryDownload.doDownload(http, maven + notation.toModulePath() + "maven-metadata.xml", null);
 
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();

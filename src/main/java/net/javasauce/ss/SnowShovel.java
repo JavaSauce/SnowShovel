@@ -17,10 +17,7 @@ import net.javasauce.ss.tasks.git.*;
 import net.javasauce.ss.tasks.report.DiscordReportTask;
 import net.javasauce.ss.tasks.report.GenerateComparisonsTask;
 import net.javasauce.ss.tasks.util.*;
-import net.javasauce.ss.util.DeleteHierarchyVisitor;
-import net.javasauce.ss.util.JdkProvider;
-import net.javasauce.ss.util.ProcessableVersionSet;
-import net.javasauce.ss.util.RunRequest;
+import net.javasauce.ss.util.*;
 import net.javasauce.ss.util.matrix.JobMatrix;
 import net.javasauce.ss.util.task.Task;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
@@ -332,7 +329,7 @@ public class SnowShovel {
             task.downloadHash.set(Optional.of("2e355d2ede2307bfe40330db29f52b9b729fd9b2"));
         });
 
-        Map<LibraryTasks.LibraryDownload, DownloadTask> libraryDownloads = new HashMap<>();
+        Map<LibraryDownload, DownloadTask> libraryDownloads = new HashMap<>();
 
         var gitTagAllBarrier = new BarrierTask("gitTagAllBarrier");
         for (var version : runRequest.versions()) {
@@ -363,7 +360,7 @@ public class SnowShovel {
                 task.remapped.set(versionsDir.resolve(id).resolve(id + "-client-remapped.jar"));
             });
 
-            var libDefs = LibraryTasks.getVersionLibraries(manifest, librariesDir);
+            var libDefs = LibraryDownload.getVersionLibraries(manifest, librariesDir);
             List<DownloadTask> libraries = FastStream.of(libDefs)
                     .map(library -> libraryDownloads.computeIfAbsent(library, e2 ->
                             DownloadTask.create("downloadLibrary_" + library.notation(), DOWNLOAD_EXECUTOR, http, task -> {
