@@ -125,7 +125,7 @@ public class DiscordReportTask extends Task {
 
             String nameSuffix = comp.addedTotal()[i] != 0 || comp.removedTotal()[i] != 0 ? "(+" + comp.addedTotal()[i] + " -" + comp.removedTotal()[i] + ")" : "";
 
-            embed.addField(state.humanName + " " + nameSuffix, summary, false);
+            embed.addField(state.humanName + ": " + comp.numCases()[i] + " " + nameSuffix, summary, false);
         }
         return embed;
     }
