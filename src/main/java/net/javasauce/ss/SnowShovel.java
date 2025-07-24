@@ -212,11 +212,12 @@ public class SnowShovel {
             task.git.set(gitSetupTask.output);
             task.branch.set("main");
         });
+        Task.runTasks(checkoutMain);
 
         var git = gitSetupTask.output.get();
         try (git; DOWNLOAD_EXECUTOR; REMAPPER_EXECUTOR; DECOMPILE_EXECUTOR; GIT_EXECUTOR) {
             if (optSet.has(genMatrixOpt)) {
-                var stage1 = runStage1(http, repoDir, checkoutMain, gitSetupTask, simulateFullRun, mcVersionOverride, decompilerOverride);
+                var stage1 = runStage1(http, repoDir, gitSetupTask, simulateFullRun, mcVersionOverride, decompilerOverride);
                 if (stage1 == null) {
                     LOGGER.info("No changes.");
                     return;
@@ -233,8 +234,6 @@ public class SnowShovel {
                 return;
             }
             if (optSet.has(useMatrixOpt)) {
-                Task.runTasks(checkoutMain);
-
                 var runRequest = net.javasauce.ss.util.RunRequest.parse(optSet.valueOf(useMatrixOpt));
                 var versionSet = new ProcessableVersionSet(http, repoDir.resolve("cache"));
                 versionSet.allVersions();
@@ -242,8 +241,6 @@ public class SnowShovel {
                 return;
             }
             if (optSet.has(finalizeMatrixOpt)) {
-                Task.runTasks(checkoutMain);
-
                 var versionSet = new ProcessableVersionSet(http, repoDir.resolve("cache"));
                 var matrix = net.javasauce.ss.util.matrix.JobMatrix.parse(optSet.valueOf(finalizeMatrixOpt));
                 var runRequest = net.javasauce.ss.util.RunRequest.mergeJobs(matrix);
@@ -251,7 +248,7 @@ public class SnowShovel {
                 return;
             }
 
-            var stage1 = runStage1(http, repoDir, checkoutMain, gitSetupTask, simulateFullRun, mcVersionOverride, decompilerOverride);
+            var stage1 = runStage1(http, repoDir, gitSetupTask, simulateFullRun, mcVersionOverride, decompilerOverride);
             if (stage1 == null) {
                 LOGGER.info("No changes.");
                 return;
@@ -265,7 +262,6 @@ public class SnowShovel {
     private static @Nullable Stage1Pair runStage1(
             HttpEngine http,
             Path repoDir,
-            CheckoutBranchTask checkoutMain,
             SetupGitRepoTask gitSetupTask,
             boolean simulateFullRun,
             List<String> mcVersionOverride,
@@ -273,7 +269,6 @@ public class SnowShovel {
     ) {
         // Stage 1, Detect changes.
         var detectChanges = DetectChangesTask.create("detectChanges", ForkJoinPool.commonPool(), task -> {
-            task.dependsOn(checkoutMain);
             task.http.set(http);
             task.cacheDir.set(repoDir.resolve("cache"));
             task.versionFilters.set(mcVersionOverride);
