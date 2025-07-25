@@ -16,7 +16,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * A task is some operation that executes some operation. Tasks can declare
+ * A task is some operation that executes on a given executor. Tasks can declare
  * inputs and outputs. Outputs of one task may be used as inputs to another task.
  * <p>
  * Tasks automatically declare dependencies between each-other by consuming their outputs
