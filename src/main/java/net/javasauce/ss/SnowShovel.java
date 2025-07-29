@@ -212,6 +212,7 @@ public class SnowShovel {
                 }
                 if (shouldPush) {
                     var pushTask = PushAllTask.create("pushAllTags", GIT_EXECUTOR, task -> {
+                        task.git.set(gitSetupTask.output);
                         task.tags.set(true);
                     });
                     Task.runTasks(pushTask);
@@ -430,6 +431,8 @@ public class SnowShovel {
         pushAllTagsBarrier.dependsOn(gitTagAllBarrier);
         if (shouldPush) {
             var pushTask = PushAllTask.create("pushAllTags", GIT_EXECUTOR, task -> {
+                task.dependsOn(gitTagAllBarrier);
+                task.git.set(gitSetupTask.output);
                 task.tags.set(true);
             });
             pushAllTagsBarrier.dependsOn(pushTask);
@@ -500,7 +503,7 @@ public class SnowShovel {
             var pushTask = PushAllTask.create("pushAllBranches", GIT_EXECUTOR, task -> {
                 task.git.set(gitSetupTask.output);
                 task.dependsOn(amendMain);
-                task.tags.set(false);
+                task.branches.set(true);
             });
             pushBarrier.dependsOn(pushTask);
         }
