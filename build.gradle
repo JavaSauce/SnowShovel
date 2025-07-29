@@ -16,7 +16,7 @@ java {
 group = 'net.javasauce'
 
 var buildNumber = System.getenv("BUILD_NUMBER")
-version = '0.1'
+version = '0.2'
 if (buildNumber != null) {
     version = "$version.$buildNumber"
 } else {
