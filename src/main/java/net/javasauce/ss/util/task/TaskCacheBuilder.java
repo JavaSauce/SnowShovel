@@ -1,7 +1,7 @@
-package net.javasauce.ss.util;
+package net.javasauce.ss.util.task;
 
 import net.covers1624.quack.util.SneakyUtils;
-import org.jetbrains.annotations.Nullable;
+import net.javasauce.ss.util.Hashing;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -9,49 +9,50 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * Created by covers1624 on 6/24/25.
  */
-public class TaskCache {
+public class TaskCacheBuilder {
 
     private final Path cacheFile;
     private final List<SneakyUtils.ThrowingConsumer<MessageDigest, IOException>> entries = new ArrayList<>();
 
-    private TaskCache(Path cacheFile) {
+    public TaskCacheBuilder(Path cacheFile) {
         this.cacheFile = cacheFile;
     }
 
-    public static TaskCache forOutput(Path outputPath) {
-        return forOutput(outputPath, "");
+    public <T> void add(TaskIO<T> io) {
+        add(io, Function.identity());
     }
 
-    public static TaskCache forOutput(Path outputPath, String suffix) {
-        return new TaskCache(outputPath.resolveSibling(outputPath.getFileName() + suffix + ".sha1"));
+    public <T, U> void add(TaskIO<T> io, Function<? super T, ? extends U> mapper) {
+        add(mapper.apply(io.get()));
     }
 
-    public TaskCache add(Path file) {
+    public void add(Path file) {
         entries.add(e -> Hashing.tryAddFileBytes(e, file));
-        return this;
     }
 
-    public TaskCache add(CharSequence str) {
+    public void add(CharSequence str) {
         entries.add(e -> Hashing.addUTFBytes(e, str.toString()));
-        return this;
     }
 
-    public TaskCache add(Number num) {
+    public void add(Number num) {
         entries.add(e -> Hashing.addUTFBytes(e, num.toString()));
-        return this;
     }
 
-    public TaskCache addNullable(@Nullable CharSequence str) {
-        entries.add(e -> {
-            if (str != null) {
-                Hashing.addUTFBytes(e, str.toString());
-            }
-        });
-        return this;
+    public void add(Object obj) {
+        switch (obj) {
+            case Path path -> add(path);
+            case CharSequence str -> add(str);
+            case Number num -> add(num);
+            case Optional<?> opt -> opt.ifPresent(this::add);
+            case TaskIO<?> io -> add(io);
+            default -> throw new IllegalStateException("Unable to cache value: " + obj.getClass());
+        }
     }
 
     private String hash() throws IOException {

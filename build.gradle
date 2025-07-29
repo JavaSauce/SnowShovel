@@ -16,7 +16,7 @@ java {
 group = 'net.javasauce'
 
 var buildNumber = System.getenv("BUILD_NUMBER")
-version = '0.1'
+version = '0.2'
 if (buildNumber != null) {
     version = "$version.$buildNumber"
 } else {
@@ -44,6 +44,7 @@ dependencies {
     implementation 'net.covers1624:JdkUtils:0.6.0.24'
     implementation 'net.covers1624:curl4j:3.0.16:libcurl'
     implementation 'com.google.code.gson:gson:2.11.0'
+    implementation 'org.apache.commons:commons-lang3:3.17.0'
 
     implementation 'org.eclipse.jgit:org.eclipse.jgit:7.0.0.202409031743-r'
 

@@ -3,14 +3,9 @@ package net.javasauce.ss.util;
 import com.google.gson.Gson;
 import net.covers1624.quack.collection.FastStream;
 import net.covers1624.quack.gson.JsonUtils;
-import net.covers1624.quack.net.HttpEngineDownloadAction;
-import net.covers1624.quack.net.httpapi.HttpEngine;
-import net.javasauce.ss.tasks.DownloadTasks;
-import net.javasauce.ss.tasks.Tasks;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Date;
 import java.util.List;
@@ -28,20 +23,9 @@ public record VersionListManifest(
 ) {
 
     private static final Gson GSON = new Gson();
-    public static final String URL = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
-    public static final String FILE_NAME = "version_manifest_v2.json";
 
-    public static void save(DownloadTasks.InMemoryDownload download, Path file) throws IOException {
-        download.writeTo(file);
-        JsonPretty.prettyPrintJsonFile(file);
-    }
-
-    public static VersionListManifest loadFrom(String str) {
-        try {
-            return JsonUtils.parse(GSON, str, VersionListManifest.class);
-        } catch (IOException ex) {
-            throw new RuntimeException("Failed to parse manifest.", ex);
-        }
+    public static VersionListManifest loadFrom(String str) throws IOException {
+        return JsonUtils.parse(GSON, str, VersionListManifest.class);
     }
 
     @Override

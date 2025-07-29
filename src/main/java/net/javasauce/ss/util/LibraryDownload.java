@@ -1,20 +1,19 @@
-package net.javasauce.ss.tasks;
+package net.javasauce.ss.util;
 
 import net.covers1624.quack.collection.FastStream;
 import net.covers1624.quack.maven.MavenNotation;
-import net.covers1624.quack.net.httpapi.HttpEngine;
-import net.javasauce.ss.util.VersionManifest;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.file.Path;
-import java.util.*;
-import java.util.concurrent.CompletableFuture;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * Created by covers1624 on 1/20/25.
  */
-public class LibraryTasks {
+public record LibraryDownload(MavenNotation notation, String url, @Nullable String sha1, long size, Path path) {
 
     // Minecraft compiles against these annotations, but does not ship them for runtime.
     // Some versions don't need them applied, but it's fine to add anyway.
@@ -22,18 +21,6 @@ public class LibraryTasks {
             new VersionManifest.Library(MavenNotation.parse("org.jetbrains:annotations:26.0.1"), null, null, null, null, null),
             new VersionManifest.Library(MavenNotation.parse("com.google.code.findbugs:jsr305:3.0.2"), null, null, null, null, null)
     );
-
-    public static void downloadLibraries(HttpEngine http, Iterable<LibraryDownload> downloads) {
-        List<CompletableFuture<Path>> downloadFutures = FastStream.of(downloads)
-                .map(e -> DownloadTask.of(e.path(), e.url())
-                        .withDownloadLen(e.size())
-                        .withDownloadHash(e.sha1())
-                        .executeAsync(http)
-                )
-                .toList();
-        CompletableFuture.allOf(downloadFutures.toArray(CompletableFuture[]::new))
-                .join();
-    }
 
     public static List<LibraryDownload> getVersionLibraries(VersionManifest manifest, Path librariesDir) {
         return FastStream.of(manifest.libraries())
@@ -65,6 +52,4 @@ public class LibraryTasks {
 
         return new LibraryDownload(library.name(), artifact.url(), artifact.sha1(), artifact.size(), libPath);
     }
-
-    public record LibraryDownload(MavenNotation notation, String url, @Nullable String sha1, long size, Path path) { }
 }

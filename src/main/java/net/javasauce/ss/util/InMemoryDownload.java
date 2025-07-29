@@ -1,9 +1,10 @@
-package net.javasauce.ss.tasks;
+package net.javasauce.ss.util;
 
 import net.covers1624.quack.io.IOUtils;
 import net.covers1624.quack.net.DownloadAction;
 import net.covers1624.quack.net.HttpEngineDownloadAction;
 import net.covers1624.quack.net.httpapi.HttpEngine;
+import net.covers1624.quack.util.SneakyUtils;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.ByteArrayOutputStream;
@@ -16,9 +17,28 @@ import java.nio.file.Path;
 /**
  * Created by covers1624 on 1/20/25.
  */
-public class DownloadTasks {
+public record InMemoryDownload(boolean isUpToDate, byte[] body, @Nullable String etag) {
 
-    public static InMemoryDownload inMemoryDownload(HttpEngine http, String url, @Nullable DownloadTasks.InMemoryDownload existing) {
+    public static @Nullable InMemoryDownload readFrom(Path file) throws IOException {
+        if (Files.notExists(file)) return null;
+
+        Path etagFile = file.resolveSibling(file.getFileName() + ".etag");
+
+        return new InMemoryDownload(
+                true, // Maybe false? meh?
+                Files.readAllBytes(file),
+                Files.exists(etagFile) ? Files.readString(etagFile, StandardCharsets.UTF_8) : null
+        );
+    }
+
+    public void writeTo(Path file) throws IOException {
+        Files.write(IOUtils.makeParents(file), body);
+        if (etag != null) {
+            Files.writeString(file.resolveSibling(file.getFileName() + ".etag"), etag, StandardCharsets.UTF_8);
+        }
+    }
+
+    public static InMemoryDownload doDownload(HttpEngine http, String url, @Nullable InMemoryDownload existing) {
         class DownloadDest implements DownloadAction.Dest {
 
             private final ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -39,7 +59,7 @@ public class DownloadTasks {
             // @formatter:on
         }
         DownloadDest dest = new DownloadDest();
-        boolean isUpToDate = Tasks.getWithRetry(10, () -> {
+        boolean isUpToDate = getWithRetry(10, () -> {
                     dest.reset();
                     var action = new HttpEngineDownloadAction(http)
                             .setUrl(url)
@@ -56,28 +76,30 @@ public class DownloadTasks {
         return new InMemoryDownload(isUpToDate, dest.bos.toByteArray(), dest.etag);
     }
 
-    public record InMemoryDownload(boolean isUpToDate, byte[] body, @Nullable String etag) {
+    private static <T> T getWithRetry(int retries, SneakyUtils.ThrowingSupplier<T, IOException> r) {
+        if (retries == 0) throw new IllegalArgumentException("Need more than 0 retries.");
 
-        public static InMemoryDownload readFrom(Path file) throws IOException {
-            Path etagFile = file.resolveSibling(file.getFileName() + ".etag");
-
-            return new InMemoryDownload(
-                    true, // Maybe false? meh?
-                    Files.readAllBytes(file),
-                    Files.exists(etagFile) ? Files.readString(etagFile, StandardCharsets.UTF_8) : null
-            );
-        }
-
-        public void writeTo(Path file) throws IOException {
-            Files.write(IOUtils.makeParents(file), body);
-            if (etag != null) {
-                Files.writeString(file.resolveSibling(file.getFileName() + ".etag"), etag, StandardCharsets.UTF_8);
+        Throwable throwable = null;
+        for (int i = 0; i < retries; i++) {
+            try {
+                return r.get();
+            } catch (Throwable ex) {
+                if (throwable == null) {
+                    throwable = ex;
+                } else {
+                    throwable.addSuppressed(ex);
+                }
             }
         }
-
-        @Override
-        public String toString() {
-            return new String(body, StandardCharsets.UTF_8);
+        if (throwable == null) {
+            throwable = new RuntimeException("Run failed?");
         }
+        SneakyUtils.throwUnchecked(throwable);
+        return null; // Never hit.
+    }
+
+    @Override
+    public String toString() {
+        return new String(body, StandardCharsets.UTF_8);
     }
 }
