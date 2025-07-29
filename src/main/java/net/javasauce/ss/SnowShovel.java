@@ -205,7 +205,7 @@ public class SnowShovel {
         var git = gitSetupTask.output.get();
         try (git; DOWNLOAD_EXECUTOR; REMAPPER_EXECUTOR; DECOMPILE_EXECUTOR; GIT_EXECUTOR) {
             if (optSet.has(genMatrixOpt)) {
-                var stage1 = runStage1(http, repoDir, gitSetupTask, simulateFullRun, mcVersionOverride, decompilerOverride);
+                var stage1 = runStage1(http, repoDir, gitSetupTask, simulateFullRun, mcVersionOverride, decompilerOverride, shouldPush);
                 if (stage1 == null) {
                     LOGGER.info("No changes.");
                     return;
@@ -245,7 +245,7 @@ public class SnowShovel {
                 return;
             }
 
-            var stage1 = runStage1(http, repoDir, gitSetupTask, simulateFullRun, mcVersionOverride, decompilerOverride);
+            var stage1 = runStage1(http, repoDir, gitSetupTask, simulateFullRun, mcVersionOverride, decompilerOverride, shouldPush);
             if (stage1 == null) {
                 LOGGER.info("No changes.");
                 return;
@@ -270,7 +270,8 @@ public class SnowShovel {
             SetupGitRepoTask gitSetupTask,
             boolean simulateFullRun,
             List<String> mcVersionOverride,
-            Optional<String> decompilerOverride
+            Optional<String> decompilerOverride,
+            boolean shouldPush
     ) throws IOException {
         // Stage 1, Detect changes.
         var detectChanges = DetectChangesTask.create("detectChanges", ForkJoinPool.commonPool(), task -> {
@@ -294,7 +295,20 @@ public class SnowShovel {
             task.commitMessage.set(Optional.of(runRequest.reason()));
             task.tagName.set(Optional.of("temp/main"));
         });
-        Task.runTasks(tempTagMain);
+
+        var pushMainTagBarrier = new BarrierTask("pushMainTag");
+        pushMainTagBarrier.dependsOn(tempTagMain);
+        if (shouldPush) {
+            // TODO make this more granular.
+            //      We can probably refactor PushAllTask to just take a list of refs to push.
+            var pushTask = PushAllTask.create("pushMainTag", GIT_EXECUTOR, task -> {
+                task.dependsOn(tempTagMain);
+                task.git.set(gitSetupTask.output);
+                task.tags.set(true);
+            });
+            pushMainTagBarrier.dependsOn(pushTask);
+        }
+        Task.runTasks(pushMainTagBarrier);
 
         if (DISCORD_WEBHOOK != null) {
             new DiscordWebhook(DISCORD_WEBHOOK)
