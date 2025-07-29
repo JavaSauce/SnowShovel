@@ -73,9 +73,11 @@ public class ProcessableVersionSet {
     public VersionListManifest listManifest() {
         if (listManifest == null) {
             try {
-                var existing = InMemoryDownload.readFrom(cacheDir.resolve("version_manifest_v2.json"));
-                var download = InMemoryDownload.doDownload(http, VERSION_MANIFEST_URL, existing);
-                listManifest = VersionListManifest.loadFrom(download.toString());
+                var manifestDownload = InMemoryDownload.readFrom(cacheDir.resolve("version_manifest_v2.json"));
+                if (manifestDownload == null) {
+                    manifestDownload = InMemoryDownload.doDownload(http, VERSION_MANIFEST_URL, manifestDownload);
+                }
+                listManifest = VersionListManifest.loadFrom(manifestDownload.toString());
             } catch (IOException ex) {
                 throw new RuntimeException("Failed to load manifest.", ex);
             }
