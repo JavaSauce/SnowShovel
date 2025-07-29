@@ -270,7 +270,7 @@ public class SnowShovel {
             boolean simulateFullRun,
             List<String> mcVersionOverride,
             Optional<String> decompilerOverride
-    ) {
+    ) throws IOException {
         // Stage 1, Detect changes.
         var detectChanges = DetectChangesTask.create("detectChanges", ForkJoinPool.commonPool(), task -> {
             task.http.set(http);
@@ -294,6 +294,12 @@ public class SnowShovel {
             task.tagName.set(Optional.of("temp/main"));
         });
         Task.runTasks(tempTagMain);
+
+        if (DISCORD_WEBHOOK != null) {
+            new DiscordWebhook(DISCORD_WEBHOOK)
+                    .setContent("SnowShovel run starting, processing " + runRequest.versions().size() + " versions.")
+                    .execute(http);
+        }
         return new Stage1Pair(runRequest, versionSet);
     }
 
@@ -441,7 +447,7 @@ public class SnowShovel {
             ExtractTestStatsTask preStats,
             boolean shouldPush,
             String repoUrl
-    ) {
+    ) throws IOException {
         // Stage 3
         var fastForwardBarrier = new BarrierTask("fastForwardBarrier");
         List<String> tagsToDelete = new ArrayList<>();
@@ -527,6 +533,11 @@ public class SnowShovel {
         }
 
         Task.runTasks(pushBarrier, deleteTags, discordPostBarrier);
+        if (DISCORD_WEBHOOK != null) {
+            new DiscordWebhook(DISCORD_WEBHOOK)
+                    .setContent("SnowShovel run finished, processed " + runRequest.versions().size() + " versions.")
+                    .execute(http);
+        }
     }
 
     private static SetupJdkTask getJdkTask(JdkProvider jdkProvider, JavaVersion javaVersion) {
