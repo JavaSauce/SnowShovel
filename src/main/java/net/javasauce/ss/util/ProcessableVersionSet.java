@@ -50,20 +50,34 @@ public class ProcessableVersionSet {
         var newDownload = InMemoryDownload.doDownload(http, VERSION_MANIFEST_URL, existingDownload);
         if (newDownload.isUpToDate()) return List.of();
 
-        var oldManifest = listManifest;
-        var newManifest = VersionListManifest.loadFrom(newDownload.toString());
+        var oldListManifest = existingDownload != null ? VersionListManifest.loadFrom(existingDownload.toString()) : null;
+        var newListManifest = VersionListManifest.loadFrom(newDownload.toString());
         newDownload.writeTo(cacheDir.resolve("version_manifest_v2.json"));
 
-        Map<String, VersionListManifest.Version> oldMap = oldManifest != null ? oldManifest.versionsMap() : Map.of();
+        Map<String, VersionManifest> oldManifests = FastStream.ofNullable(oldListManifest)
+                .flatMap(this::resolveManifests)
+                .toMap(VersionManifest::id, e -> e);
+        var newManifestsList = FastStream.of(newListManifest)
+                .flatMap(this::resolveManifests)
+                .toList();
+        Map<String, VersionManifest> newManifests = FastStream.of(newManifestsList)
+                .toLinkedHashMap(VersionManifest::id, e -> e);
+
+        // Pre-populate these, so we don't re-load them later when asked for all versions.
+        populateManifests(newManifestsList);
 
         List<ChangedVersion> changes = new ArrayList<>();
-        for (VersionListManifest.Version version : newManifest.versions()) {
+        for (VersionListManifest.Version version : newListManifest.versions()) {
             var id = version.id();
             if (IgnoredVersions.IGNORED_VERSION.contains(id)) continue;
 
-            if (!oldMap.containsKey(id)) {
+            var newManifest = newManifests.get(id);
+            if (newManifest == null) throw new RuntimeException("Missing manifest? " + id);
+
+            var oldManifest = oldManifests.get(id);
+            if (oldManifest == null) {
                 changes.add(new ChangedVersion(ChangeReason.NEW, id));
-            } else if (!oldMap.get(id).url().equals(version.url())) { // TODO we should compare manifests, we don't care about asset updates.
+            } else if (!newManifest.equals(oldManifest)) {
                 changes.add(new ChangedVersion(ChangeReason.CHANGED, id));
             }
         }
@@ -107,7 +121,19 @@ public class ProcessableVersionSet {
     }
 
     private void populateManifests() {
-        var downloads = FastStream.of(listManifest().versions())
+        populateManifests(resolveManifests(listManifest()));
+    }
+
+    private void populateManifests(List<VersionManifest> manifests) {
+        allVersions = List.copyOf(FastStream.of(manifests.reversed())
+                .map(VersionManifest::id)
+                .toList());
+        versionManifests = Map.copyOf(FastStream.of(manifests.reversed())
+                .toLinkedHashMap(VersionManifest::id, e -> e));
+    }
+
+    private List<VersionManifest> resolveManifests(VersionListManifest listManifest) {
+        var downloads = FastStream.of(listManifest.versions())
                 .filter(e -> !IgnoredVersions.IGNORED_VERSION.contains(e.id()))
                 .map(version -> DownloadTask.create("downloadManifest_" + version.id(), ForkJoinPool.commonPool(), http, task -> {
                     task.url.set(version.url());
@@ -126,12 +152,7 @@ public class ProcessableVersionSet {
         } catch (IOException ex) {
             throw new RuntimeException("Failed to read manifests.", ex);
         }
-
-        allVersions = List.copyOf(FastStream.of(manifests.reversed())
-                .map(VersionManifest::id)
-                .toList());
-        versionManifests = Map.copyOf(FastStream.of(manifests.reversed())
-                .toLinkedHashMap(VersionManifest::id, e -> e));
+        return manifests;
     }
 
     public enum ChangeReason {

@@ -25,8 +25,9 @@ import static java.util.Objects.requireNonNull;
  */
 public record VersionManifest(
         @Nullable Arguments arguments,
-        @Nullable AssetIndex assetIndex,
-        @Nullable String assets,
+// Disabled, we don't need them for this project, we use VersionManifest.equals to detect changes we want to re-run for.
+//        @Nullable AssetIndex assetIndex,
+//        @Nullable String assets,
         @Nullable Map<String, Download> downloads,
         @Nullable String id,
         @Nullable VersionManifest.McJavaVersion javaVersion,
