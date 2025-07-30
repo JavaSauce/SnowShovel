@@ -118,7 +118,7 @@ public class DetectChangesTask extends Task {
 
     private @Nullable RunRequest detectSelfChanges(ProcessableVersionSet versionSet, Map<String, String> versions) {
         LOGGER.info("Checking for changes to SnowShovel version since last run..");
-        var prev = versions.get(TAG_DECOMPILER_VERSION);
+        var prev = versions.get(TAG_SNOW_SHOVEL_VERSION);
         if (SnowShovel.VERSION.equals(prev)) return null;
 
         var commit = "SnowShovel updated from " + prev + " to " + SnowShovel.VERSION;
