@@ -136,7 +136,6 @@ public class SnowShovel {
         OptionSpec<Void> simulateFullRunOpt = parser.accepts("simulate-full-run", "Manually run a full decompile of all versions.");
 
         OptionSpec<String> versionOpt = parser.accepts("only-version", "Dev only flag. Filter the versions to process, limited to any specified by this flag.")
-                .availableIf(simulateFullRunOpt)
                 .withRequiredArg()
                 .withValuesSeparatedBy(",");
 

@@ -7,6 +7,7 @@ import net.covers1624.quack.collection.FastStream;
 import net.covers1624.quack.gson.JsonUtils;
 import net.covers1624.quack.io.IOUtils;
 import net.covers1624.quack.net.httpapi.HttpEngine;
+import net.covers1624.quack.util.SneakyUtils;
 import net.javasauce.ss.SnowShovel;
 import net.javasauce.ss.util.ProcessableVersionSet;
 import net.javasauce.ss.util.RunRequest;
@@ -30,6 +31,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * Created by covers1624 on 7/16/25.
@@ -79,12 +81,11 @@ public class DetectChangesTask extends Task {
             request = detectAutomaticChanges(versionSet, versions);
         } else {
             LOGGER.info("Running in Manual mode. Re-processing everything.");
-            var versionFilters = this.versionFilters.get();
             request = new RunRequest(
                     "Manual run: Process all versions.",
                     chooseDecompilerVersion(versions, decompilerOverride.get().orElse(null)),
                     FastStream.of(versionSet.allVersions())
-                            .filter(e -> versionFilters.isEmpty() || versionFilters.contains(e))
+                            .filter(getVersionFilter())
                             .map(e -> new VersionRequest(e, "Manual run: Process all versions."))
                             .toList()
             );
@@ -109,10 +110,13 @@ public class DetectChangesTask extends Task {
 
         if (request == null) return null;
 
+        var versionFilter = getVersionFilter();
         return new RunRequest(
                 "Automatic run: " + request.reason(),
                 request.decompilerVersion(),
-                request.versions()
+                FastStream.of(request.versions())
+                        .filter(e -> versionFilter.test(e.id()))
+                        .toList()
         );
     }
 
@@ -179,6 +183,13 @@ public class DetectChangesTask extends Task {
                 "https://maven.covers1624.net",
                 SnowShovel.DECOMPILER_TEMPLATE
         );
+    }
+
+    private Predicate<String> getVersionFilter() {
+        var versionFilters = this.versionFilters.get();
+        if (versionFilters.isEmpty()) return SneakyUtils.trueP();
+
+        return versionFilters::contains;
     }
 
     private static Map<String, String> loadVersions(Path versionsFile) throws IOException {
