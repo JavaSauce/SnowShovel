@@ -21,6 +21,7 @@ jobs:
       - name: Split work
         id: split_work
         env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           GIT_USER: JavaSauce
           GIT_PASS: ${{ secrets.GIT_PASS }}
         run: |
