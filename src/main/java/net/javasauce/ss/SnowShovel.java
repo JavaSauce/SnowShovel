@@ -222,13 +222,30 @@ public class SnowShovel {
                 return;
             }
             if (optSet.has(runMatrixOpt)) {
-                var runRequest = RunRequest.parse(optSet.valueOf(runMatrixOpt));
+                // Fast-forward main to our tag, we are in matrix mode and don't push branch changes, this is fine.
+                var fastForwardMain = FastForwardTask.create("fastForwardMain", GIT_EXECUTOR, task -> {
+                    task.git.set(gitSetupTask.output);
+                    task.branch.set("main");
+                    task.tag.set(Optional.of("temp/main"));
+                });
+                Task.runTasks(fastForwardMain);
+
                 var versionSet = new ProcessableVersionSet(http, repoDir.resolve("cache"));
                 versionSet.allVersions();
+
+                var runRequest = RunRequest.parse(optSet.valueOf(runMatrixOpt));
                 runStage2(http, jdkProvider, toolsDir, librariesDir, versionsDir, tempDir, repoDir, runRequest, versionSet, gitSetupTask, shouldPush);
                 return;
             }
             if (optSet.has(finalizeMatrixOpt)) {
+                // Fast-forward main to our tag, we are in matrix mode and don't push branch changes, this is fine.
+                var fastForwardMain = FastForwardTask.create("fastForwardMain", GIT_EXECUTOR, task -> {
+                    task.git.set(gitSetupTask.output);
+                    task.branch.set("main");
+                    task.tag.set(Optional.of("temp/main"));
+                });
+                Task.runTasks(fastForwardMain);
+
                 var versionSet = new ProcessableVersionSet(http, repoDir.resolve("cache"));
                 var matrix = JobMatrix.parse(optSet.valueOf(finalizeMatrixOpt));
                 var runRequest = RunRequest.mergeJobs(matrix);
