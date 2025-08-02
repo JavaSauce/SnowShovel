@@ -11,6 +11,8 @@ import org.eclipse.jgit.api.MergeCommand;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.lib.*;
 import org.eclipse.jgit.revwalk.RevWalk;
+import org.eclipse.jgit.transport.PushResult;
+import org.eclipse.jgit.transport.RemoteRefUpdate;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -109,21 +111,43 @@ public abstract class AbstractGitTask extends Task {
     }
 
     protected void pushAllBranches() throws GitAPIException {
-        git.get().push()
+        var results = git.get().push()
                 .setRemote("origin")
                 .setPushAll()
                 .setProgressMonitor(new TextProgressMonitor())
                 .call();
+        validatePush(results);
     }
 
     protected void pushAllTags() throws GitAPIException {
         LOGGER.info("Pushing all tags...");
-        git.get().push()
+        var results = git.get().push()
                 .setRemote("origin")
                 .setForce(true)
                 .setPushTags()
                 .setProgressMonitor(new TextProgressMonitor())
                 .call();
+        validatePush(results);
+    }
+
+    private static void validatePush(Iterable<PushResult> results) {
+        var errors = FastStream.of(results)
+                .flatMap(PushResult::getRemoteUpdates)
+                .filter(e -> e.getStatus() != RemoteRefUpdate.Status.OK && e.getStatus() != RemoteRefUpdate.Status.UP_TO_DATE)
+                .map(e -> new RuntimeException(
+                        "Failed to push %s to %s failed: %s %s".formatted(
+                                e.getSrcRef(),
+                                e.getRemoteName(),
+                                e.getStatus(),
+                                e.getMessage()))
+                )
+                .toList();
+        if (!errors.isEmpty()) {
+            throw FastStream.of(errors).fold(new RuntimeException("Failed to push."), (a, b) -> {
+                a.addSuppressed(b);
+                return a;
+            });
+        }
     }
 
     protected void wipeCheckedOutFiles() throws IOException {
