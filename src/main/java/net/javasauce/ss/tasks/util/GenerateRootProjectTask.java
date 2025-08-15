@@ -64,7 +64,7 @@ public class GenerateRootProjectTask extends GenProjectTask {
         readme += generateReport(
                 FastStream.of(versions.get())
                         .filter(testDefs::containsKey)
-                        .toMap(e -> e, e -> testDefs.get(e).def())
+                        .toLinkedHashMap(e -> e, e -> testDefs.get(e).def())
         );
         return readme;
     }
