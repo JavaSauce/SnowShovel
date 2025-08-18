@@ -234,7 +234,7 @@ public class SnowShovel {
                 versionSet.allVersions();
 
                 var runRequest = RunRequest.parse(optSet.valueOf(runMatrixOpt));
-                runStage2(http, jdkProvider, toolsDir, librariesDir, versionsDir, tempDir, repoDir, runRequest, versionSet, gitSetupTask, shouldPush);
+                runStage2(http, jdkProvider, toolsDir, librariesDir, versionsDir, tempDir, repoDir, runRequest, versionSet, gitSetupTask, shouldPush, repoUrl);
                 return;
             }
             if (optSet.has(finalizeMatrixOpt)) {
@@ -274,7 +274,7 @@ public class SnowShovel {
                 task.versionSet.set(stage1.versionSet);
             });
             Task.runTasks(preStats); // TODO it'd be nice if we could push this into the task tree of runStage2 somehow.
-            runStage2(http, jdkProvider, toolsDir, librariesDir, versionsDir, tempDir, repoDir, stage1.runRequest, stage1.versionSet, gitSetupTask, shouldPush);
+            runStage2(http, jdkProvider, toolsDir, librariesDir, versionsDir, tempDir, repoDir, stage1.runRequest, stage1.versionSet, gitSetupTask, shouldPush, repoUrl);
             runStage3(http, repoDir, stage1.runRequest, stage1.versionSet, gitSetupTask, preStats, shouldPush, repoUrl);
         }
         LOGGER.info("Done!");
@@ -350,7 +350,8 @@ public class SnowShovel {
             RunRequest runRequest,
             ProcessableVersionSet versionSet,
             SetupGitRepoTask gitSetupTask,
-            boolean shouldPush
+            boolean shouldPush,
+            String repoUrl
     ) {
 
         // Stage 2
@@ -444,7 +445,8 @@ public class SnowShovel {
                 task.gradleWrapperDist.set(downloadGradleWrapper.output);
                 task.javaVersion.set(manifest.computeJavaVersion());
                 task.libraries.set(libDefs);
-                task.mcVersion.set(id);
+                task.mcManifest.set(manifest);
+                task.gitRepoUrl.set(repoUrl);
             });
 
             var commitTask = CommitTask.create("commitAndTag_" + id, GIT_EXECUTOR, task -> {
@@ -516,8 +518,9 @@ public class SnowShovel {
         var genRootProject = GenerateRootProjectTask.create("genRootProject", ForkJoinPool.commonPool(), task -> {
             task.dependsOn(fastForwardMain);
             task.projectDir.set(repoDir);
-            task.versions.set(versionSet.allVersions());
+            task.versions.set(versionSet);
             task.testDefs.set(postStats.testStats);
+            task.gitRepoUrl.set(repoUrl);
         });
 
         var amendMain = CommitTask.create("amendMain", GIT_EXECUTOR, task -> {

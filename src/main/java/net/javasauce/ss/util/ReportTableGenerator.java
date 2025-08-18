@@ -1,48 +1,50 @@
-package net.javasauce.ss.tasks.util;
+package net.javasauce.ss.util;
 
 import net.covers1624.quack.collection.ColUtils;
 import net.javasauce.ss.tasks.report.TestCaseDef;
 import net.javasauce.ss.tasks.report.TestCaseState;
-import net.javasauce.ss.util.task.Task;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.Executor;
 
 /**
- * Created by covers1624 on 7/16/25.
+ * Created by covers1624 on 8/18/25.
  */
-public abstract class GenProjectTask extends Task {
+public class ReportTableGenerator {
 
-    protected GenProjectTask(String name, Executor executor) {
-        super(name, executor);
-    }
+    private static final List<TestCaseState> ORDER = TestCaseState.VALUES.reversed();
+    private final List<String> table = new ArrayList<>();
 
-    protected static String generateReport(Map<String, TestCaseDef> defs) {
-        if (defs.isEmpty()) return "No test stats found.";
-
-        List<String> table = new ArrayList<>();
-        List<TestCaseState> order = TestCaseState.VALUES.reversed();
+    public ReportTableGenerator() {
         table.add("<table>");
         table.add("<tr>");
         table.add("<td>Version</td>");
-        for (var state : order) {
+        for (var state : ORDER) {
             emitTableCell(table, state.humanName);
         }
         table.add("</tr>");
+    }
 
-        defs.forEach((id, def) -> {
-            var stats = sumCases(def);
-            table.add("<tr>");
-            emitTableCell(table, id);
-            for (var state : order) {
-                emitTableCell(table, "" + stats[state.ordinal()]);
-            }
-            table.add("</tr>");
-        });
+    public ReportTableGenerator addRow(String id, TestCaseDef def, String repo, String branch) {
+        if (table.isEmpty()) throw new RuntimeException("Already finished building.");
+
+        var stats = sumCases(def);
+        table.add("<tr>");
+        emitTableCell(table, "[" + id + "](" + repo + "/tree/" + branch + ")");
+        for (var state : ORDER) {
+            emitTableCell(table, "" + stats[state.ordinal()]);
+        }
+        table.add("</tr>");
+        return this;
+    }
+
+    public String build() {
+        if (table.isEmpty()) throw new RuntimeException("Already finished building.");
+
         table.add("</table>");
-        return String.join("\n", table);
+        String builtTable = String.join("\n", table);
+        table.clear();
+        return builtTable;
     }
 
     private static void emitTableCell(List<String> table, String cellContent) {

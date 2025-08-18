@@ -2,8 +2,11 @@ package net.javasauce.ss.tasks.util;
 
 import net.covers1624.jdkutils.JavaVersion;
 import net.covers1624.quack.io.IndentPrintWriter;
-import net.javasauce.ss.util.LibraryDownload;
 import net.javasauce.ss.tasks.report.TestCaseDef;
+import net.javasauce.ss.util.LibraryDownload;
+import net.javasauce.ss.util.ReportTableGenerator;
+import net.javasauce.ss.util.VersionManifest;
+import net.javasauce.ss.util.task.Task;
 import net.javasauce.ss.util.task.TaskInput;
 import org.jetbrains.annotations.Nullable;
 
@@ -12,20 +15,20 @@ import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
 /**
  * Created by covers1624 on 6/29/25.
  */
-public class GenerateGradleProjectTask extends GenProjectTask {
+public class GenerateGradleProjectTask extends Task {
 
     public final TaskInput<Path> projectDir = input("projectDir");
     public final TaskInput<Path> gradleWrapperDist = input("gradleWrapperDist");
     public final TaskInput<JavaVersion> javaVersion = input("javaVersion");
     public final TaskInput<List<LibraryDownload>> libraries = input("libraries");
-    public final TaskInput<String> mcVersion = input("mcVersion");
+    public final TaskInput<VersionManifest> mcManifest = input("mcManifest");
+    public final TaskInput<String> gitRepoUrl = input("gitRepoUrl");
 
     private GenerateGradleProjectTask(String name, Executor executor) {
         super(name, executor);
@@ -57,7 +60,7 @@ public class GenerateGradleProjectTask extends GenProjectTask {
         if (Files.exists(testStatsFile)) {
             testStats = TestCaseDef.loadTestStats(testStatsFile);
         }
-        Files.writeString(projectDir.resolve("README.md"), buildReadme(mcVersion.get(), testStats));
+        Files.writeString(projectDir.resolve("README.md"), buildReadme(mcManifest.get(), gitRepoUrl.get(), testStats));
     }
 
     private String buildGradleScript(JavaVersion javaVersion, List<LibraryDownload> libraries) {
@@ -144,13 +147,15 @@ public class GenerateGradleProjectTask extends GenProjectTask {
                 """;
     }
 
-    private String buildReadme(String mcVersion, @Nullable TestCaseDef testStats) {
+    private String buildReadme(VersionManifest mcManifest, String gitRepoUrl, @Nullable TestCaseDef testStats) {
         var readme = """
                 # Shoveled
                 Output of SnowShovel
                 """;
         if (testStats != null) {
-            readme += generateReport(Map.of(mcVersion, testStats));
+            readme += new ReportTableGenerator()
+                    .addRow(mcManifest.id(), testStats, gitRepoUrl, mcManifest.computeBranchName())
+                    .build();
         }
         return readme;
     }
