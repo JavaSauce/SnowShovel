@@ -108,8 +108,8 @@ public class DiscordReportTask extends Task {
     private static DiscordWebhook.Embed buildComparisonEmbed(String repoUrl, String mcVersion, CaseComparison comp, String commitTitle) {
         var embed = new DiscordWebhook.Embed()
                 .setTitle("Version changed: " + mcVersion)
-                .setUrl(repoUrl + "/compare/" + comp.leftCommit() + "..." + comp.rightCommit())
-                .setDescription(String.valueOf(commitTitle))
+                .setUrl(repoUrl + "/commits/" + comp.rightCommit())
+                .setDescription(commitTitle)
                 .setColor(new Color(0xFF9800));
         for (TestCaseState state : TestCaseState.VALUES.reversed()) {
             int i = state.ordinal();
