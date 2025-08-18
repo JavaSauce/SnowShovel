@@ -57,7 +57,7 @@ public class ReportTableGenerator {
             table.add("<td></td>");
         } else {
             // If there is any Markdown code blocks/quotes in the cell, we need to emit full spaces before/after its lines, because ~~GitHub~~.
-            if (ColUtils.anyMatch(cellContent, e -> e.contains("`"))) {
+            if (ColUtils.anyMatch(cellContent, e -> e.contains("`") || (e.contains("[") && e.contains("]")))) {
                 table.add("<td>");
                 table.add("");
                 table.addAll(cellContent);
