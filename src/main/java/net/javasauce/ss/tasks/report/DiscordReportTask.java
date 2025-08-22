@@ -5,6 +5,7 @@ import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.tasks.report.GenerateComparisonsTask.CaseComparison;
 import net.javasauce.ss.tasks.report.GenerateComparisonsTask.ComparisonType;
 import net.javasauce.ss.util.CommittedTestCaseDef;
+import net.javasauce.ss.util.CommittedTestCasePair;
 import net.javasauce.ss.util.DiscordWebhook;
 import net.javasauce.ss.util.task.Task;
 import net.javasauce.ss.util.task.TaskInput;
@@ -31,7 +32,7 @@ public class DiscordReportTask extends Task {
     public final TaskInput<String> gitRepoUrl = input("repoUrl");
     public final TaskInput<HttpEngine> http = input("http");
     public final TaskInput<List<String>> versions = input("versions");
-    public final TaskInput<Map<String, CommittedTestCaseDef>> postDefs = input("postDefs");
+    public final TaskInput<Map<String, CommittedTestCasePair>> postDefs = input("postDefs");
     public final TaskInput<Map<String, CaseComparison>> comparisons = input("comparisons");
 
     private DiscordReportTask(String name, Executor executor) {
@@ -66,9 +67,9 @@ public class DiscordReportTask extends Task {
 
             DiscordWebhook.Embed embed;
             if (comparison.type() == ComparisonType.ADDED) {
-                embed = buildNewEmbed(gitRepoUrl, id, comparison, def.commitTitle());
+                embed = buildNewEmbed(gitRepoUrl, id, comparison, def.now().commitTitle());
             } else {
-                embed = buildComparisonEmbed(gitRepoUrl, id, comparison, def.commitTitle());
+                embed = buildComparisonEmbed(gitRepoUrl, id, comparison, def.now().commitTitle());
             }
             if (!embed.hasFields()) {
                 continue;

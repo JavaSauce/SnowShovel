@@ -278,4 +278,17 @@ public abstract class AbstractGitTask extends Task {
             throw new RuntimeException("Failed to get commit message of ref.", ex);
         }
     }
+
+    protected String getParentCommit(String ref) {
+        var repo = git.get().getRepository();
+        try (RevWalk walk = new RevWalk(repo)) {
+            var commit = walk.parseCommit(repo.resolve(ref));
+            if (commit.getParentCount() != 1) {
+                throw new RuntimeException("Commit " + ref + " has " + commit.getParentCount() + " parents. Expected 1");
+            }
+            return commit.getParent(0).name();
+        } catch (IOException ex) {
+            throw new RuntimeException("Failed to get commit parent.", ex);
+        }
+    }
 }

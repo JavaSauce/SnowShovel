@@ -1,6 +1,6 @@
 package net.javasauce.ss.tasks.util;
 
-import net.javasauce.ss.util.CommittedTestCaseDef;
+import net.javasauce.ss.util.CommittedTestCasePair;
 import net.javasauce.ss.util.ProcessableVersionSet;
 import net.javasauce.ss.util.ReportTableGenerator;
 import net.javasauce.ss.util.task.Task;
@@ -20,7 +20,7 @@ public class GenerateRootProjectTask extends Task {
     public final TaskInput<Path> projectDir = input("projectDir");
 
     public final TaskInput<ProcessableVersionSet> versions = input("versions");
-    public final TaskInput<Map<String, CommittedTestCaseDef>> testDefs = input("testDefs");
+    public final TaskInput<Map<String, CommittedTestCasePair>> testDefs = input("testDefs");
     public final TaskInput<String> gitRepoUrl = input("gitRepoUrl");
 
     private GenerateRootProjectTask(String name, Executor executor) {
@@ -72,7 +72,7 @@ public class GenerateRootProjectTask extends Task {
             var testDef = testDefs.get(id);
             if (testDef == null) continue;
 
-            generator.addRow(id, testDef.def(), gitRepoUrl, versions.getManifest(id).computeBranchName());
+            generator.addRow(id, testDef.now().def(), gitRepoUrl, versions.getManifest(id).computeBranchName());
         }
         readme += generator.build();
         return readme;

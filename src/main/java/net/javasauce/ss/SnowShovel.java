@@ -249,15 +249,7 @@ public class SnowShovel {
                 var versionSet = new ProcessableVersionSet(http, repoDir.resolve("cache"));
                 var matrix = JobMatrix.parse(optSet.valueOf(finalizeMatrixOpt));
                 var runRequest = RunRequest.mergeJobs(matrix);
-                // Technically we will have the same issue as a non-matrix run, however, it is assumed that matrix runs are performed in CI, where
-                // the branches aren't updated, only the tags are.
-                var preStats = ExtractTestStatsTask.create("preExtractTestStats", GIT_EXECUTOR, task -> {
-                    task.git.set(gitSetupTask.output);
-                    task.checkOrigin.set(true);
-                    task.versionSet.set(versionSet);
-                });
-                Task.runTasks(preStats);
-                runStage3(http, repoDir, runRequest, versionSet, gitSetupTask, preStats, shouldPush, repoUrl);
+                runStage3(http, repoDir, runRequest, versionSet, gitSetupTask, shouldPush, repoUrl);
                 return;
             }
 
@@ -267,15 +259,8 @@ public class SnowShovel {
                 return;
             }
 
-            // In non-matrix mode, by the time we are fast-forwarding the branches, we have already destroyed the data we need.
-            var preStats = ExtractTestStatsTask.create("preExtractTestStats", GIT_EXECUTOR, task -> {
-                task.git.set(gitSetupTask.output);
-                task.checkOrigin.set(true);
-                task.versionSet.set(stage1.versionSet);
-            });
-            Task.runTasks(preStats); // TODO it'd be nice if we could push this into the task tree of runStage2 somehow.
             runStage2(http, jdkProvider, toolsDir, librariesDir, versionsDir, tempDir, repoDir, stage1.runRequest, stage1.versionSet, gitSetupTask, shouldPush, repoUrl);
-            runStage3(http, repoDir, stage1.runRequest, stage1.versionSet, gitSetupTask, preStats, shouldPush, repoUrl);
+            runStage3(http, repoDir, stage1.runRequest, stage1.versionSet, gitSetupTask, shouldPush, repoUrl);
         }
         LOGGER.info("Done!");
     }
@@ -479,7 +464,6 @@ public class SnowShovel {
             RunRequest runRequest,
             ProcessableVersionSet versionSet,
             SetupGitRepoTask gitSetupTask,
-            ExtractTestStatsTask preStats,
             boolean shouldPush,
             String repoUrl
     ) throws IOException {
@@ -491,7 +475,6 @@ public class SnowShovel {
             var branch = manifest.computeBranchName();
             var tag = "temp/" + branch;
             var fastForward = FastForwardTask.create("fastForward_" + version.id(), GIT_EXECUTOR, task -> {
-                task.dependsOn(preStats);
                 task.git.set(gitSetupTask.output);
                 task.branch.set(branch);
                 task.tag.set(Optional.of(tag));
@@ -508,10 +491,9 @@ public class SnowShovel {
         });
         tagsToDelete.add("temp/main");
 
-        var postStats = ExtractTestStatsTask.create("postFFExtractTestStats", GIT_EXECUTOR, task -> {
+        var extractStats = ExtractTestStatsTask.create("extractTestStats", GIT_EXECUTOR, task -> {
             task.dependsOn(fastForwardMain);
             task.git.set(gitSetupTask.output);
-            task.checkOrigin.set(true);
             task.versionSet.set(versionSet);
         });
 
@@ -519,7 +501,7 @@ public class SnowShovel {
             task.dependsOn(fastForwardMain);
             task.projectDir.set(repoDir);
             task.versions.set(versionSet);
-            task.testDefs.set(postStats.testStats);
+            task.testDefs.set(extractStats.testStats);
             task.gitRepoUrl.set(repoUrl);
         });
 
@@ -553,8 +535,7 @@ public class SnowShovel {
         if (DISCORD_WEBHOOK != null) {
             var genComparisons = GenerateComparisonsTask.create("genComparisons", ForkJoinPool.commonPool(), task -> {
                 task.dependsOn(pushBarrier);
-                task.preStats.set(preStats.testStats);
-                task.postStats.set(postStats.testStats);
+                task.stats.set(extractStats.testStats);
             });
 
             var discordReport = DiscordReportTask.create("discordReport", ForkJoinPool.commonPool(), task -> {
@@ -562,7 +543,7 @@ public class SnowShovel {
                 task.gitRepoUrl.set(repoUrl);
                 task.http.set(http);
                 task.versions.set(versionSet.allVersions());
-                task.postDefs.set(postStats.testStats);
+                task.postDefs.set(extractStats.testStats);
                 task.comparisons.set(genComparisons.comparisons);
             });
             discordPostBarrier.dependsOn(discordReport);

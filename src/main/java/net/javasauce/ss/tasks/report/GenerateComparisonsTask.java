@@ -2,6 +2,7 @@ package net.javasauce.ss.tasks.report;
 
 import net.covers1624.quack.collection.FastStream;
 import net.javasauce.ss.util.CommittedTestCaseDef;
+import net.javasauce.ss.util.CommittedTestCasePair;
 import net.javasauce.ss.util.task.Task;
 import net.javasauce.ss.util.task.TaskInput;
 import net.javasauce.ss.util.task.TaskOutput;
@@ -17,8 +18,7 @@ import java.util.function.Consumer;
  */
 public class GenerateComparisonsTask extends Task {
 
-    public final TaskInput<Map<String, CommittedTestCaseDef>> preStats = input("preStats");
-    public final TaskInput<Map<String, CommittedTestCaseDef>> postStats = input("postStats");
+    public final TaskInput<Map<String, CommittedTestCasePair>> stats = input("stats");
 
     public final TaskOutput<Map<String, CaseComparison>> comparisons = computedOutput("comparisons");
 
@@ -34,17 +34,16 @@ public class GenerateComparisonsTask extends Task {
 
     @Override
     protected void execute() throws Throwable {
-        var preStats = this.preStats.get();
-        var postStats = this.postStats.get();
+        var stats = this.stats.get();
 
-        var added = FastStream.of(postStats.keySet()).filterNot(preStats.keySet()::contains);
-        var common = FastStream.of(preStats.keySet()).filter(postStats.keySet()::contains);
-        var removed = FastStream.of(preStats.keySet()).filterNot(postStats.keySet()::contains);
+        var added = FastStream.of(stats.keySet()).filterNot(stats.keySet()::contains);
+        var common = FastStream.of(stats.keySet()).filter(stats.keySet()::contains);
+        var removed = FastStream.of(stats.keySet()).filterNot(stats.keySet()::contains);
 
         Map<String, CaseComparison> comparisons = new HashMap<>();
-        added.forEach(id -> comparisons.put(id, compareCases(null, postStats.get(id))));
-        removed.forEach(id -> comparisons.put(id, compareCases(preStats.get(id), null)));
-        common.forEach(id -> comparisons.put(id, compareCases(preStats.get(id), postStats.get(id))));
+        added.forEach(id -> comparisons.put(id, compareCases(null, stats.get(id).now())));
+        removed.forEach(id -> comparisons.put(id, compareCases(stats.get(id).before(), null)));
+        common.forEach(id -> comparisons.put(id, compareCases(stats.get(id).before(), stats.get(id).now())));
         this.comparisons.set(comparisons);
     }
 
