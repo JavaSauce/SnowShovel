@@ -511,7 +511,7 @@ public class SnowShovel {
         var postStats = ExtractTestStatsTask.create("postFFExtractTestStats", GIT_EXECUTOR, task -> {
             task.dependsOn(fastForwardMain);
             task.git.set(gitSetupTask.output);
-            task.checkOrigin.set(false);
+            task.checkOrigin.set(true);
             task.versionSet.set(versionSet);
         });
 
