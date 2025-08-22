@@ -82,7 +82,7 @@ public class SnowShovel {
 
     private static final Map<JavaVersion, SetupJdkTask> JDK_TASKS = new HashMap<>();
 
-    public static final MavenNotation FAST_REMAPPER_VERSION = MavenNotation.parse("net.covers1624:FastRemapper:0.3.2.20@zip");
+    public static final MavenNotation FAST_REMAPPER_VERSION = MavenNotation.parse("net.covers1624:FastRemapper:0.3.2.22@zip");
     public static final MavenNotation DECOMPILER_TEMPLATE = MavenNotation.parse("net.javasauce:Decompiler:0:testframework@zip");
     public static final String VERSION;
 

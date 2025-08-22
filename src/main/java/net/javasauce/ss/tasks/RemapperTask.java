@@ -63,11 +63,7 @@ public class RemapperTask extends Task {
                         "--output",
                         remapped.toAbsolutePath().toString(),
                         "--flip",
-                        "--fix-locals",
-                        "--fix-source",
-                        "--fix-ctor-anns",
-                        "--fix-stripped-ctors",
-                        "--fix-record-ctor-param-names"
+                        "--all-fixers"
                 ),
                 tool.workingDir(),
                 LOGGER::info
