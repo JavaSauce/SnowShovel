@@ -8,6 +8,22 @@ import java.util.Set;
 public class IgnoredVersions {
 
     public static final Set<String> IGNORED_VERSION = Set.of(
+            // These versions contain multiple unresolvable issues.
+            // Notably Signature declarations are stripped making it impossible for us to recover generics from them.
+            "21w37a",
+            "21w38a",
+            "21w39a",
+            "21w40a",
+            "21w41a",
+            "21w42a",
+            "21w43a",
+            "21w44a",
+            "1.18-pre1",
+            "1.18-pre2",
+            "1.18-pre3",
+            "1.18-pre4",
+            "1.18-pre5",
+
             // Versions known to contain no mappings.
             "19w35a",
             "19w34a",
