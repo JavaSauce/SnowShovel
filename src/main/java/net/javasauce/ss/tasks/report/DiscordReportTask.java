@@ -97,7 +97,7 @@ public class DiscordReportTask extends Task {
     private static DiscordWebhook.Embed buildNewEmbed(String repoUrl, String mcVersion, CaseComparison comparison, String commitTitle) {
         var embed = new DiscordWebhook.Embed()
                 .setTitle("New version: " + mcVersion)
-                .setUrl(repoUrl + "/commits/" + comparison.rightCommit())
+                .setUrl(repoUrl + "/commit/" + comparison.rightCommit())
                 .setDescription(commitTitle)
                 .setColor(new Color(0x4CAF50));
         for (TestCaseState state : TestCaseState.VALUES.reversed()) {
@@ -109,7 +109,7 @@ public class DiscordReportTask extends Task {
     private static DiscordWebhook.Embed buildComparisonEmbed(String repoUrl, String mcVersion, CaseComparison comp, String commitTitle) {
         var embed = new DiscordWebhook.Embed()
                 .setTitle("Version changed: " + mcVersion)
-                .setUrl(repoUrl + "/commits/" + comp.rightCommit())
+                .setUrl(repoUrl + "/commit/" + comp.rightCommit())
                 .setDescription(commitTitle)
                 .setColor(new Color(0xFF9800));
         for (TestCaseState state : TestCaseState.VALUES.reversed()) {
