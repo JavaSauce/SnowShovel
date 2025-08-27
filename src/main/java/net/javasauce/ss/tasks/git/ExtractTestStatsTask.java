@@ -50,7 +50,7 @@ public class ExtractTestStatsTask extends AbstractGitTask {
 
             defs.put(id, new CommittedTestCasePair(
                     id,
-                    getTestDef(beforeCommit),
+                    beforeCommit != null ? getTestDef(beforeCommit) : null,
                     getTestDef(nowCommit)
             ));
         }

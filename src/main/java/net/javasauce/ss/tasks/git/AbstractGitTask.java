@@ -279,13 +279,14 @@ public abstract class AbstractGitTask extends Task {
         }
     }
 
-    protected String getParentCommit(String ref) {
+    protected @Nullable String getParentCommit(String ref) {
         var repo = git.get().getRepository();
         try (RevWalk walk = new RevWalk(repo)) {
             var commit = walk.parseCommit(repo.resolve(ref));
-            if (commit.getParentCount() != 1) {
-                throw new RuntimeException("Commit " + ref + " has " + commit.getParentCount() + " parents. Expected 1");
-            }
+
+            if (commit.getParentCount() == 0) return null;
+            if (commit.getParentCount() > 1) throw new RuntimeException("Commit " + ref + " has more than one parent commit. " + commit.getParentCount());
+
             return commit.getParent(0).name();
         } catch (IOException ex) {
             throw new RuntimeException("Failed to get commit parent.", ex);
