@@ -23,7 +23,8 @@ public class DecompileTask extends Task {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DecompileTask.class);
 
-    public final TaskInput<Path> javaHome = input("javaHome");
+    public final TaskInput<Path> javaRuntimeHome = input("javaRuntimeHome");
+    public final TaskInput<Path> javaReferenceHome = input("javaReferenceHome");
     public final TaskInput<PrepareToolTask.PreparedTool> tool = input("tool");
     public final TaskInput.Collection<Path> libraries = inputCollection("libraries");
     public final TaskInput<Path> inputJar = input("inputJar");
@@ -50,12 +51,13 @@ public class DecompileTask extends Task {
 
         var tool = this.tool.get();
         var procResult = ProcessUtils.runProcess(
-                JavaInstall.getJavaExecutable(javaHome.get(), true),
+                JavaInstall.getJavaExecutable(javaRuntimeHome.get(), true),
                 List.of(
                         "-ea", "-XX:-OmitStackTraceInFastThrow",
                         "-Dcoffeegrinder.testcases.library=true",
                         "-Dcoffeegrinder.testcases.library.update_defs=true",
                         "-Dcoffeegrinder.test.update=true",
+                        "-Dcoffeegrinder.test.java_under_test=" + JavaInstall.getJavaExecutable(javaReferenceHome.get(), true),
                         "-Dcoffeegrinder.test.output=" + output.resolve("src/main/java").toAbsolutePath(),
                         "-Dcoffeegrinder.test.compile_error_output=" + output.resolve("src/main/java").toAbsolutePath(),
                         "-Dcoffeegrinder.test.rt_diff_output=" + output.resolve("src/main/java").toAbsolutePath(),

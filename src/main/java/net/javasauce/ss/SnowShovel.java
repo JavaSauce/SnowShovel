@@ -400,7 +400,8 @@ public class SnowShovel {
                     .toList();
 
             var decompileTask = DecompileTask.create("decompile_" + id, DECOMPILE_EXECUTOR, task -> {
-                task.javaHome.set(getJdkTask(jdkProvider, manifest.computeJavaVersion()).javaHome);
+                task.javaRuntimeHome.set(getJdkTask(jdkProvider, manifest.computeJavaVersion()).javaHome);
+                task.javaReferenceHome.set(getJdkTask(jdkProvider, manifest.computeJavaVersion()).javaHome);
                 task.tool.set(prepareDecompiler.output);
                 task.libraries.set(FastStream.of(libraries).map(e -> e.output).toList());
                 task.inputJar.set(remapClient.remapped);
