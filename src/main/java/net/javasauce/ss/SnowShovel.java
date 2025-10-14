@@ -400,7 +400,7 @@ public class SnowShovel {
                     .toList();
 
             var decompileTask = DecompileTask.create("decompile_" + id, DECOMPILE_EXECUTOR, task -> {
-                task.javaRuntimeHome.set(getJdkTask(jdkProvider, manifest.computeJavaVersion()).javaHome);
+                task.javaRuntimeHome.set(getJdkTask(jdkProvider, pickDecompilerJavaVersion(JavaVersion.JAVA_21, manifest.computeJavaVersion())).javaHome);
                 task.javaReferenceHome.set(getJdkTask(jdkProvider, manifest.computeJavaVersion()).javaHome);
                 task.tool.set(prepareDecompiler.output);
                 task.libraries.set(FastStream.of(libraries).map(e -> e.output).toList());
@@ -564,5 +564,11 @@ public class SnowShovel {
                     task.javaVersion.set(javaVersion);
                 })
         );
+    }
+
+    private static JavaVersion pickDecompilerJavaVersion(JavaVersion a, JavaVersion b) {
+        if (a.ordinal() > b.ordinal()) return a;
+
+        return b;
     }
 }
