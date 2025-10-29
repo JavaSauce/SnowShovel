@@ -35,6 +35,7 @@ jobs:
     needs: [ discover ]
     if: ${{ needs.discover.outputs.matrix != '' }}
     strategy:
+      max-parallel: 16 # The org can only run 20 jobs in parallel in total, limit this so other projects can do stuff too.
       matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
