@@ -6,6 +6,7 @@ import net.javasauce.ss.util.CommittedTestCasePair;
 import net.javasauce.ss.util.ProcessableVersionSet;
 import net.javasauce.ss.util.task.TaskInput;
 import net.javasauce.ss.util.task.TaskOutput;
+import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.Ref;
 
 import java.io.IOException;
@@ -43,7 +44,10 @@ public class ExtractTestStatsTask extends AbstractGitTask {
         for (String id : versionSet.allVersions()) {
             var manifest = versionSet.getManifest(id);
             var branchName = manifest.computeBranchName();
-            Ref ref = repository.findRef(branchName);
+            Ref ref = repository.findRef(Constants.R_HEADS + branchName);
+            if (ref == null) {
+                ref = repository.findRef(Constants.R_REMOTES + "origin/" + branchName);
+            }
             if (ref == null) continue;
             var nowCommit = ref.getObjectId().name();
             var beforeCommit = getParentCommit(nowCommit);
