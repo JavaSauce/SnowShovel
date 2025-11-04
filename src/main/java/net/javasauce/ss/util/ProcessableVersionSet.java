@@ -67,7 +67,7 @@ public class ProcessableVersionSet {
         populateManifests(newManifestsList);
 
         List<ChangedVersion> changes = new ArrayList<>();
-        for (VersionListManifest.Version version : newListManifest.versions()) {
+        for (VersionListManifest.Version version : insertUnobfSnapshots(newListManifest.versions())) {
             var id = version.id();
             if (IgnoredVersions.IGNORED_VERSION.contains(id)) continue;
 
@@ -82,6 +82,25 @@ public class ProcessableVersionSet {
             }
         }
         return changes;
+    }
+
+    private List<VersionListManifest.Version> insertUnobfSnapshots(List<VersionListManifest.Version> versions) {
+        List<VersionListManifest.Version> newVersions = new ArrayList<>();
+        for (VersionListManifest.Version version : versions) {
+            if (version.id().equals("25w45a")) {
+                newVersions.add(new VersionListManifest.Version(
+                        "25w45a_unobfuscated",
+                        "snapshot",
+                        "https://ss.ln-k.net/7bc38.json",
+                        null,
+                        null,
+                        "6d1ea1ebfbb189a2a40fbb5899d569c6437aff31",
+                        1
+                ));
+            }
+            newVersions.add(version);
+        }
+        return newVersions;
     }
 
     public VersionListManifest listManifest() {
@@ -133,7 +152,7 @@ public class ProcessableVersionSet {
     }
 
     private List<VersionManifest> resolveManifests(VersionListManifest listManifest) {
-        var downloads = FastStream.of(listManifest.versions())
+        var downloads = FastStream.of(insertUnobfSnapshots(listManifest.versions()))
                 .filter(e -> !IgnoredVersions.IGNORED_VERSION.contains(e.id()))
                 .map(version -> DownloadTask.create("downloadManifest_" + version.id(), ForkJoinPool.commonPool(), http, task -> {
                     task.url.set(version.url());

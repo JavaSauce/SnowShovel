@@ -38,11 +38,6 @@ public record VersionListManifest(
         return versions != null ? versions : List.of();
     }
 
-    public Map<String, Version> versionsMap() {
-        return FastStream.of(versions())
-                .toMap(Version::id, Function.identity());
-    }
-
     public record Latest(
             @Nullable String release,
             @Nullable String snapshot
