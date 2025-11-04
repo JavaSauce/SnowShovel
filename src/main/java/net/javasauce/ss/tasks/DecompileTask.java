@@ -1,5 +1,6 @@
 package net.javasauce.ss.tasks;
 
+import com.google.gson.Gson;
 import net.covers1624.jdkutils.JavaInstall;
 import net.covers1624.quack.collection.FastStream;
 import net.javasauce.ss.util.ProcessUtils;
@@ -21,6 +22,8 @@ import java.util.function.Consumer;
  */
 public class DecompileTask extends Task {
 
+    private static final Gson GSON = new Gson();
+
     private static final Logger LOGGER = LoggerFactory.getLogger(DecompileTask.class);
 
     public final TaskInput<Path> javaRuntimeHome = input("javaRuntimeHome");
@@ -28,6 +31,7 @@ public class DecompileTask extends Task {
     public final TaskInput<PrepareToolTask.PreparedTool> tool = input("tool");
     public final TaskInput.Collection<Path> libraries = inputCollection("libraries");
     public final TaskInput<Path> inputJar = input("inputJar");
+    public final TaskInput<List<String>> javacArgs = input("javacArgs");
 
     public final TaskOutput<Path> output = output("output");
 
@@ -49,6 +53,8 @@ public class DecompileTask extends Task {
         libraryPath.add(inputJar.get());
         libraryPath.addAll(libraries.get());
 
+        var javacArgs = this.javacArgs.get();
+
         var tool = this.tool.get();
         var procResult = ProcessUtils.runProcess(
                 JavaInstall.getJavaExecutable(javaRuntimeHome.get(), true),
@@ -67,6 +73,7 @@ public class DecompileTask extends Task {
                                 .map(Path::toAbsolutePath)
                                 .map(Path::toString)
                                 .join(File.pathSeparator),
+                        "-Dcoffeegrinder.test.javac_args=" + GSON.toJson(javacArgs),
                         "-jar", tool.toolJar().toAbsolutePath().toString(),
                         "execute",
                         "--scan-classpath",

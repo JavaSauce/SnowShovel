@@ -413,6 +413,7 @@ public class SnowShovel {
                 task.libraries.set(FastStream.of(libraries).map(e -> e.output).toList());
                 task.inputJar.set(jarToDecompile);
                 task.output.set(tempDir.resolve(id));
+                task.javacArgs.set(getJavacArgs(manifest));
             });
 
             var branchName = manifest.computeBranchName();
@@ -577,5 +578,11 @@ public class SnowShovel {
         if (a.ordinal() > b.ordinal()) return a;
 
         return b;
+    }
+
+    private static List<String> getJavacArgs(VersionManifest manifest) {
+        // TODO we need to check date once this snapshot train is over.
+        if (manifest.id().endsWith("_unobfuscated")) return List.of("-parameters");
+        return List.of();
     }
 }
