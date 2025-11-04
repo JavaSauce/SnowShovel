@@ -23,6 +23,7 @@ import net.javasauce.ss.tasks.util.*;
 import net.javasauce.ss.util.*;
 import net.javasauce.ss.util.matrix.JobMatrix;
 import net.javasauce.ss.util.task.Task;
+import net.javasauce.ss.util.task.TaskOutput;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.eclipse.jgit.transport.CredentialsProvider;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
@@ -372,21 +373,27 @@ public class SnowShovel {
                 task.downloadLen.set(download.size());
             });
 
-            var downloadClientMappings = DownloadTask.create("downloadClientMappings_" + id, DOWNLOAD_EXECUTOR, http, task -> {
-                var download = manifest.downloads().get("client_mappings");
-                task.output.set(versionsDir.resolve(id).resolve(id + "-client_mappings.jar"));
-                task.url.set(download.url());
-                task.downloadHash.set(Optional.of(download.sha1()));
-                task.downloadLen.set(download.size());
-            });
+            TaskOutput<Path> jarToDecompile;
+            if (manifest.downloads().containsKey("client_mappings")) {
+                var downloadClientMappings = DownloadTask.create("downloadClientMappings_" + id, DOWNLOAD_EXECUTOR, http, task -> {
+                    var download = manifest.downloads().get("client_mappings");
+                    task.output.set(versionsDir.resolve(id).resolve(id + "-client_mappings.jar"));
+                    task.url.set(download.url());
+                    task.downloadHash.set(Optional.of(download.sha1()));
+                    task.downloadLen.set(download.size());
+                });
 
-            var remapClient = RemapperTask.create("remapClient_" + id, REMAPPER_EXECUTOR, task -> {
-                task.tool.set(prepareRemapper.output);
-                task.javaHome.set(getJdkTask(jdkProvider, JavaVersion.JAVA_17).javaHome);
-                task.input.set(downloadClient.output);
-                task.mappings.set(downloadClientMappings.output);
-                task.remapped.set(versionsDir.resolve(id).resolve(id + "-client-remapped.jar"));
-            });
+                var remapClient = RemapperTask.create("remapClient_" + id, REMAPPER_EXECUTOR, task -> {
+                    task.tool.set(prepareRemapper.output);
+                    task.javaHome.set(getJdkTask(jdkProvider, JavaVersion.JAVA_17).javaHome);
+                    task.input.set(downloadClient.output);
+                    task.mappings.set(downloadClientMappings.output);
+                    task.remapped.set(versionsDir.resolve(id).resolve(id + "-client-remapped.jar"));
+                });
+                jarToDecompile = remapClient.remapped;
+            } else {
+                jarToDecompile = downloadClient.output;
+            }
 
             var libDefs = LibraryDownload.getVersionLibraries(manifest, librariesDir);
             List<DownloadTask> libraries = FastStream.of(libDefs)
@@ -404,7 +411,7 @@ public class SnowShovel {
                 task.javaReferenceHome.set(getJdkTask(jdkProvider, manifest.computeJavaVersion()).javaHome);
                 task.tool.set(prepareDecompiler.output);
                 task.libraries.set(FastStream.of(libraries).map(e -> e.output).toList());
-                task.inputJar.set(remapClient.remapped);
+                task.inputJar.set(jarToDecompile);
                 task.output.set(tempDir.resolve(id));
             });
 
