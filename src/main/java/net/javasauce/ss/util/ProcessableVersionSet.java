@@ -54,6 +54,9 @@ public class ProcessableVersionSet {
         var newListManifest = VersionListManifest.loadFrom(newDownload.toString());
         newDownload.writeTo(cacheDir.resolve("version_manifest_v2.json"));
 
+        oldListManifest = UnobfuscatedVersions.insert(oldListManifest);
+        newListManifest = UnobfuscatedVersions.insert(newListManifest);
+
         Map<String, VersionManifest> oldManifests = FastStream.ofNullable(oldListManifest)
                 .flatMap(this::resolveManifests)
                 .toMap(VersionManifest::id, e -> e);
@@ -67,7 +70,7 @@ public class ProcessableVersionSet {
         populateManifests(newManifestsList);
 
         List<ChangedVersion> changes = new ArrayList<>();
-        for (VersionListManifest.Version version : insertUnobfSnapshots(newListManifest.versions())) {
+        for (VersionListManifest.Version version : newListManifest.versions()) {
             var id = version.id();
             if (IgnoredVersions.IGNORED_VERSION.contains(id)) continue;
 
@@ -84,25 +87,6 @@ public class ProcessableVersionSet {
         return changes;
     }
 
-    private List<VersionListManifest.Version> insertUnobfSnapshots(List<VersionListManifest.Version> versions) {
-        List<VersionListManifest.Version> newVersions = new ArrayList<>();
-        for (VersionListManifest.Version version : versions) {
-            if (version.id().equals("25w45a")) {
-                newVersions.add(new VersionListManifest.Version(
-                        "25w45a_unobfuscated",
-                        "snapshot",
-                        "https://ss.ln-k.net/7bc38.json",
-                        null,
-                        null,
-                        "6d1ea1ebfbb189a2a40fbb5899d569c6437aff31",
-                        1
-                ));
-            }
-            newVersions.add(version);
-        }
-        return newVersions;
-    }
-
     public VersionListManifest listManifest() {
         if (listManifest == null) {
             try {
@@ -110,7 +94,7 @@ public class ProcessableVersionSet {
                 if (manifestDownload == null) {
                     manifestDownload = InMemoryDownload.doDownload(http, VERSION_MANIFEST_URL, manifestDownload);
                 }
-                listManifest = VersionListManifest.loadFrom(manifestDownload.toString());
+                listManifest = UnobfuscatedVersions.insert(VersionListManifest.loadFrom(manifestDownload.toString()));
             } catch (IOException ex) {
                 throw new RuntimeException("Failed to load manifest.", ex);
             }
@@ -152,7 +136,7 @@ public class ProcessableVersionSet {
     }
 
     private List<VersionManifest> resolveManifests(VersionListManifest listManifest) {
-        var downloads = FastStream.of(insertUnobfSnapshots(listManifest.versions()))
+        var downloads = FastStream.of(listManifest.versions())
                 .filter(e -> !IgnoredVersions.IGNORED_VERSION.contains(e.id()))
                 .map(version -> DownloadTask.create("downloadManifest_" + version.id(), ForkJoinPool.commonPool(), http, task -> {
                     task.url.set(version.url());
