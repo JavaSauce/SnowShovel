@@ -3,6 +3,8 @@ package net.javasauce.ss.tasks.report;
 import net.covers1624.quack.collection.FastStream;
 import net.javasauce.ss.util.CommittedTestCaseDef;
 import net.javasauce.ss.util.CommittedTestCasePair;
+import net.javasauce.ss.util.RunRequest;
+import net.javasauce.ss.util.VersionRequest;
 import net.javasauce.ss.util.task.Task;
 import net.javasauce.ss.util.task.TaskInput;
 import net.javasauce.ss.util.task.TaskOutput;
@@ -19,6 +21,7 @@ import java.util.function.Consumer;
 public class GenerateComparisonsTask extends Task {
 
     public final TaskInput<Map<String, CommittedTestCasePair>> stats = input("stats");
+    public final TaskInput<RunRequest> runRequest = input("runRequest");
 
     public final TaskOutput<Map<String, CaseComparison>> comparisons = computedOutput("comparisons");
 
@@ -35,10 +38,14 @@ public class GenerateComparisonsTask extends Task {
     @Override
     protected void execute() throws Throwable {
         var stats = this.stats.get();
+        var runRequest = this.runRequest.get();
+        var ranVersions = FastStream.of(runRequest.versions())
+                .map(VersionRequest::id)
+                .toList();
 
-        var added = FastStream.of(stats.keySet()).filterNot(stats.keySet()::contains);
-        var common = FastStream.of(stats.keySet()).filter(stats.keySet()::contains);
-        var removed = FastStream.of(stats.keySet()).filterNot(stats.keySet()::contains);
+        var added = FastStream.of(ranVersions).filterNot(stats.keySet()::contains);
+        var common = FastStream.of(ranVersions).filter(stats.keySet()::contains);
+        var removed = FastStream.of(ranVersions).filterNot(stats.keySet()::contains);
 
         Map<String, CaseComparison> comparisons = new HashMap<>();
         added.forEach(id -> comparisons.put(id, compareCases(null, stats.get(id).now())));
