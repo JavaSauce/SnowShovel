@@ -545,6 +545,7 @@ public class SnowShovel {
             var genComparisons = GenerateComparisonsTask.create("genComparisons", ForkJoinPool.commonPool(), task -> {
                 task.dependsOn(pushBarrier);
                 task.stats.set(extractStats.testStats);
+                task.runRequest.set(runRequest);
             });
 
             var discordReport = DiscordReportTask.create("discordReport", ForkJoinPool.commonPool(), task -> {
