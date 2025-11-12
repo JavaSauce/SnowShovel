@@ -15,11 +15,20 @@ public class UnobfuscatedVersions {
     private static final Map<String, VersionListManifest.Version> UNOBFUSCATED_VERSIONS = Map.ofEntries(
             Map.entry("25w45a", new VersionListManifest.Version(
                     "25w45a_unobfuscated",
-                    "snapshot",
-                    "https://ss.ln-k.net/7bc38.json",
+                    "unobfuscated",
+                    "https://gist.githubusercontent.com/covers1624/be877edb5e463c17ceb34c53e81fb8a3/raw/96dc13be5fe27f5a20911d0015b111ed4a4a66df/25w45a_unobfuscated.json",
                     null,
                     null,
                     "6d1ea1ebfbb189a2a40fbb5899d569c6437aff31",
+                    1
+            )),
+            Map.entry("25w46a", new VersionListManifest.Version(
+                    "25w46a_unobfuscated",
+                    "unobfuscated",
+                    "https://gist.githubusercontent.com/covers1624/673f8d0e357f50b98c15e695031766de/raw/17bc0aecb2efa4264b308ce4222b2206c603ddb4/25w46a_unobfuscated.json",
+                    null,
+                    null,
+                    "075d0d8cea4a7ba8a1c3911dc06b1e3284e58c4a",
                     1
             ))
     );
