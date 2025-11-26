@@ -48,6 +48,15 @@ public class UnobfuscatedVersions {
                     null,
                     "dfcad9b5f743c13c0e8599b4aed4260e6bd2e941",
                     1
+            )),
+            Map.entry("1.21.11-pre3", new VersionListManifest.Version(
+                    "1.21.11-pre3_unobfuscated",
+                    "unobfuscated",
+                    "https://gist.githubusercontent.com/covers1624/db4e3ea37830b007b4f1a6e9858c52a5/raw/134199189de6f6e1e42f975d1c2b27ad896f9248/1.21.11-pre3_unobfuscated.json",
+                    null,
+                    null,
+                    "25b3833993eca3c8270f701839b9fe771cc3bd6d",
+                    1
             ))
     );
 
