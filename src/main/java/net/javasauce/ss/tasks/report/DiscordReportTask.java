@@ -55,7 +55,7 @@ public class DiscordReportTask extends Task {
         var comparisons = this.comparisons.get();
 
         List<DiscordWebhook.Embed> embeds = new ArrayList<>();
-        for (String id : versions.reversed()) {
+        for (String id : versions) {
             var comparison = comparisons.get(id);
 
             if (comparison == null) continue; // Uhh, not possible, but okay?

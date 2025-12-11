@@ -68,7 +68,7 @@ public class GenerateRootProjectTask extends Task {
                 """;
 
         var generator = new ReportTableGenerator();
-        for (String id : versions.allVersions()) {
+        for (String id : versions.allVersions().reversed()) {
             var testDef = testDefs.get(id);
             if (testDef == null) continue;
 
