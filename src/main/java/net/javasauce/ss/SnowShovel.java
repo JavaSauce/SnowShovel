@@ -34,6 +34,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -582,8 +583,16 @@ public class SnowShovel {
     }
 
     private static List<String> getJavacArgs(VersionManifest manifest) {
-        // TODO we need to check date once this snapshot train is over.
-        if (manifest.id().endsWith("_unobfuscated")) return List.of("-parameters");
+        if (requiresParameters(manifest)) return List.of("-parameters");
         return List.of();
+    }
+
+    private static boolean requiresParameters(VersionManifest manifest) {
+        // After this date, all Minecraft releases were moved to their new YY.DROP[-SNAPSHOT.NUM] format, and with that,
+        // obfuscation was completely removed.
+        if (manifest.releaseTime().toInstant().isAfter(Instant.parse("2025-12-16T12:00:00+00:00"))) return true;
+
+        // These were a series of manual releases Mojang performed in the lead up to removing obfuscation.
+        return manifest.id().endsWith("_unobfuscated");
     }
 }
