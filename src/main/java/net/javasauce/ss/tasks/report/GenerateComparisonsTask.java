@@ -63,16 +63,16 @@ public class GenerateComparisonsTask extends Task {
 
         Map<String, TestCaseState> a = FastStream.of(left.def().cases.entrySet()).toMap(Map.Entry::getKey, e -> e.getValue().target);
         Map<String, TestCaseState> b = FastStream.of(right.def().cases.entrySet()).toMap(Map.Entry::getKey, e -> e.getValue().target);
-        int[] numCases = new int[4];
+        int[] numCases = new int[TestCaseState.NUM_STATES];
         for (var value : b.values()) {
             numCases[value.ordinal()]++;
         }
 
-        int[] addedTotal = new int[4];
-        int[] removedTotal = new int[4];
+        int[] addedTotal = new int[TestCaseState.NUM_STATES];
+        int[] removedTotal = new int[TestCaseState.NUM_STATES];
 
-        int[] improvedStats = new int[4];
-        int[] regressedStats = new int[4];
+        int[] improvedStats = new int[TestCaseState.NUM_STATES];
+        int[] regressedStats = new int[TestCaseState.NUM_STATES];
 
         FastStream.of(a.keySet())
                 .filter(b.keySet()::contains)
@@ -103,7 +103,7 @@ public class GenerateComparisonsTask extends Task {
     }
 
     private static int[] sumCases(TestCaseDef def) {
-        int[] numCases = new int[4];
+        int[] numCases = new int[TestCaseState.NUM_STATES];
         for (var c : def.cases.entrySet()) {
             numCases[c.getValue().target.ordinal()]++;
         }

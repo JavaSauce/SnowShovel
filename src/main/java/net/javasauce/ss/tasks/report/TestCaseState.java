@@ -9,9 +9,11 @@ public enum TestCaseState {
     BROKEN("Broken"),
     SOURCE("Source"),
     COMPILE("Compile"),
+    SEMANTIC_EQUIVALENCE("SemanticEq"),
     BYTECODE_ROUND_TRIP("RoundTrip");
 
     public static final List<TestCaseState> VALUES = List.of(values());
+    public static final int NUM_STATES = VALUES.size();
 
     public final String humanName;
 

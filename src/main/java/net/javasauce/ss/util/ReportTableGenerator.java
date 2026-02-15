@@ -74,7 +74,7 @@ public class ReportTableGenerator {
     }
 
     private static int[] sumCases(TestCaseDef def) {
-        int[] numCases = new int[4];
+        int[] numCases = new int[TestCaseState.NUM_STATES];
         for (var c : def.cases.entrySet()) {
             numCases[c.getValue().target.ordinal()]++;
         }
