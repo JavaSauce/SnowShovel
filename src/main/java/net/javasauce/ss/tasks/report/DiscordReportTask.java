@@ -4,11 +4,11 @@ import net.covers1624.quack.collection.FastStream;
 import net.covers1624.quack.net.httpapi.HttpEngine;
 import net.javasauce.ss.tasks.report.GenerateComparisonsTask.CaseComparison;
 import net.javasauce.ss.tasks.report.GenerateComparisonsTask.ComparisonType;
-import net.javasauce.ss.util.CommittedTestCaseDef;
 import net.javasauce.ss.util.CommittedTestCasePair;
 import net.javasauce.ss.util.DiscordWebhook;
 import net.javasauce.ss.util.task.Task;
 import net.javasauce.ss.util.task.TaskInput;
+import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
 import java.io.IOException;
@@ -71,9 +71,8 @@ public class DiscordReportTask extends Task {
             } else {
                 embed = buildComparisonEmbed(gitRepoUrl, id, comparison, def.now().commitTitle());
             }
-            if (!embed.hasFields()) {
-                continue;
-            }
+            if (embed == null) continue;
+
             embeds.add(embed);
         }
 
@@ -106,28 +105,33 @@ public class DiscordReportTask extends Task {
         return embed;
     }
 
-    private static DiscordWebhook.Embed buildComparisonEmbed(String repoUrl, String mcVersion, CaseComparison comp, String commitTitle) {
+    private static @Nullable DiscordWebhook.Embed buildComparisonEmbed(String repoUrl, String mcVersion, CaseComparison comp, String commitTitle) {
         var embed = new DiscordWebhook.Embed()
                 .setTitle("Version changed: " + mcVersion)
                 .setUrl(repoUrl + "/commit/" + comp.rightCommit())
                 .setDescription(commitTitle)
                 .setColor(new Color(0xFF9800));
+        boolean anyChanges = false;
         for (TestCaseState state : TestCaseState.VALUES) {
             int i = state.ordinal();
             if (comp.numCases()[i] == 0 && comp.removedTotal()[i] == 0) continue;
             String summary = "";
             if (comp.improvedStats()[i] > 0) {
                 summary = GS + " " + comp.improvedStats()[i] + " improved";
+                anyChanges = true;
             }
             if (comp.regressedStats()[i] > 0) {
                 if (!summary.isEmpty()) summary += " ";
                 summary += RS + " " + comp.regressedStats()[i] + " regressed";
+                anyChanges = true;
             }
 
             String nameSuffix = comp.addedTotal()[i] != 0 || comp.removedTotal()[i] != 0 ? "(+" + comp.addedTotal()[i] + " -" + comp.removedTotal()[i] + ")" : "";
 
             embed.addField(state.humanName + ": " + comp.numCases()[i] + " " + nameSuffix, summary, false);
         }
+        if (!anyChanges || embed.getFields().isEmpty()) return null;
+
         return embed;
     }
 }
