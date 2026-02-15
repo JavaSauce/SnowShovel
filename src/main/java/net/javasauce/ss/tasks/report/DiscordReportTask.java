@@ -114,7 +114,7 @@ public class DiscordReportTask extends Task {
                 .setColor(new Color(0xFF9800));
         for (TestCaseState state : TestCaseState.VALUES.reversed()) {
             int i = state.ordinal();
-            if (comp.addedTotal()[i] == 0 && comp.removedTotal()[i] == 0) continue;
+            if (comp.numCases()[i] == 0 && comp.removedTotal()[i] == 0) continue;
             String summary = "";
             if (comp.improvedStats()[i] > 0) {
                 summary = GS + " " + comp.improvedStats()[i] + " improved";
