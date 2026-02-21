@@ -99,7 +99,7 @@ public class DiscordReportTask extends Task {
                 .setUrl(repoUrl + "/commit/" + comparison.rightCommit())
                 .setDescription(commitTitle)
                 .setColor(new Color(0x4CAF50));
-        for (TestCaseState state : TestCaseState.VALUES) {
+        for (TestCaseState state : TestCaseState.VALUES.reversed()) {
             embed.addField(state.humanName, String.valueOf(comparison.numCases()[state.ordinal()]), false);
         }
         return embed;
@@ -112,7 +112,7 @@ public class DiscordReportTask extends Task {
                 .setDescription(commitTitle)
                 .setColor(new Color(0xFF9800));
         boolean anyChanges = false;
-        for (TestCaseState state : TestCaseState.VALUES) {
+        for (TestCaseState state : TestCaseState.VALUES.reversed()) {
             int i = state.ordinal();
             if (comp.numCases()[i] == 0 && comp.removedTotal()[i] == 0) continue;
             String summary = "";
