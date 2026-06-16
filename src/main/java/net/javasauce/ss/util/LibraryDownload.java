@@ -6,9 +6,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.file.Path;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Created by covers1624 on 1/20/25.
@@ -23,7 +21,21 @@ public record LibraryDownload(MavenNotation notation, String url, @Nullable Stri
     );
 
     public static List<LibraryDownload> getVersionLibraries(VersionManifest manifest, Path librariesDir) {
-        return FastStream.of(manifest.libraries())
+        var seenDependencies = new HashSet<String>();
+        // Run the rule filtering, excludes duplicate dependencies of different versions for different platforms.
+        var libraries = FastStream.of(manifest.libraries())
+                .filter(e -> VersionManifest.Rule.apply(e.rules(), Set.of()))
+                .toList();
+        libraries.forEach(e -> seenDependencies.add(e.name().group + ":" + e.name().module));
+
+        // Second pass, find any dependencies which are platform specific and forcibly add those back in.
+        // These dependencies may be required for platform-specific code to compile.
+        for (VersionManifest.Library library : manifest.libraries()) {
+            if (seenDependencies.add(library.name().group + ":" + library.name().module)) {
+                libraries.add(library);
+            }
+        }
+        return FastStream.of(libraries)
                 .concat(ANNOTATIONS)
                 .map(e -> computeDownload(e, librariesDir))
                 .filter(Objects::nonNull)
@@ -31,8 +43,6 @@ public record LibraryDownload(MavenNotation notation, String url, @Nullable Stri
     }
 
     private static @Nullable LibraryDownload computeDownload(VersionManifest.Library library, Path librariesDir) {
-        // Run the rule filtering, excludes duplicate dependencies of different versions for different platforms.
-        if (!VersionManifest.Rule.apply(library.rules(), Set.of())) return null;
         // No natives required here.
         if (!library.natives().isEmpty()) return null;
 
