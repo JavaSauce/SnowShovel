@@ -1,6 +1,7 @@
 package net.javasauce.ss.tasks.util;
 
 import net.covers1624.quack.io.CopyingFileVisitor;
+import net.covers1624.quack.io.IOUtils;
 import net.javasauce.ss.util.task.Task;
 import net.javasauce.ss.util.task.TaskInput;
 import net.javasauce.ss.util.task.TaskOutput;
@@ -47,7 +48,7 @@ public class CopyTask extends Task {
             if (Files.exists(output) && Files.isDirectory(output)) {
                 fileOutput = output.resolve(input.getFileName());
             }
-            Files.copy(input, fileOutput, StandardCopyOption.REPLACE_EXISTING);
+            Files.copy(input, IOUtils.makeParents(fileOutput), StandardCopyOption.REPLACE_EXISTING);
         }
     }
 }
