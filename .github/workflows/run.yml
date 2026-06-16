@@ -12,9 +12,9 @@ jobs:
     outputs:
       matrix: ${{ steps.split_work.outputs.work }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.3
       - name: Setup Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5.2.0
         with:
           java-version: 21
           distribution: 'temurin'
@@ -38,9 +38,9 @@ jobs:
       max-parallel: 16 # The org can only run 20 jobs in parallel in total, limit this so other projects can do stuff too.
       matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.3
       - name: Setup Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5.2.0
         with:
           java-version: 21
           distribution: 'temurin'
@@ -75,9 +75,9 @@ jobs:
     needs: [ discover, process_versions ]
     if: ${{ needs.discover.outputs.matrix != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.3
       - name: Setup Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5.2.0
         with:
           java-version: 21
           distribution: 'temurin'
