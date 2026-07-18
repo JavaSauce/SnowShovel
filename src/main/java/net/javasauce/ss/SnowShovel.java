@@ -293,6 +293,21 @@ public class SnowShovel {
 
         var versionSet = detectChanges.versionSet.get();
 
+        // Cleanup all tags, so a full re-run will always work.
+        List<String> tagsToDelete = FastStream.of(runRequest.versions())
+                .map(e -> versionSet.getManifest(e.id()))
+                .map(e -> "temp/" + e.computeBranchName())
+                .toList();
+        tagsToDelete.add("temp/main");
+
+        var deleteDeadTags = DeleteTagsTask.create("deleteTags", GIT_EXECUTOR, task -> {
+            task.git.set(gitSetupTask.output);
+            task.tagNames.set(tagsToDelete);
+            task.local.set(true);
+            task.remote.set(shouldPush);
+        });
+        Task.runTasks(deleteDeadTags);
+
         var tempTagMain = CommitTask.create("tagMain", GIT_EXECUTOR, task -> {
             task.git.set(gitSetupTask.output);
             task.commitMessage.set(Optional.of(runRequest.reason()));
